@@ -12,7 +12,6 @@ import webbrowser
 from pit import VERSION
 from pit.catalog import variant_bundle
 from pit.service import PitService, atomic_json
-from pit.security import OwnerGuard, OwnerRequired
 
 ROOT = Path(__file__).resolve().parent
 
@@ -22,7 +21,6 @@ class Server(ThreadingHTTPServer):
     def __init__(self, address, service, lan=False):
         super().__init__(address, Handler)
         self.service = service
-        self.owner = OwnerGuard(service.directory)
         self.csrf = secrets.token_urlsafe(32)
         self.viewer_token = secrets.token_urlsafe(24)
         ips = {"127.0.0.1", "localhost"}
@@ -82,7 +80,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond({"error": "Telefoontoken ontbreekt of is ongeldig."}, 401)
                 service = self.server.service
                 if path == "/api/security/status":
-                    return self.respond(self.server.owner.status())
+                    return self.respond(dict(password_required=False, local_control_only=True))
                 if path == "/api/bootstrap":
                     return self.respond(dict(version=VERSION, local=self.local, csrf=self.server.csrf if self.local else None,
                                              lan=self.server.lan, phone_urls=[f"http://{ip}:{self.server.server_port}/?viewer={self.server.viewer_token}" for ip in self.server.allowed_hosts if ip not in ("localhost", "127.0.0.1")] if self.local and self.server.lan else []))
@@ -135,14 +133,6 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError("JSON-object vereist.")
             service = self.server.service
-            if self.path == "/api/security/setup":
-                self.server.owner.setup(body.get("password"))
-                service.event("Eigenaarsbeveiliging ingesteld", "Wijzigingen vereisen het eigenaarswachtwoord.")
-                return self.respond(self.server.owner.status())
-            if self.path == "/api/security/change":
-                self.server.owner.change(body.get("current"), body.get("password"))
-                service.event("Eigenaarswachtwoord gewijzigd", "Nieuwe goedkeuring vereist per handeling.")
-                return self.respond(self.server.owner.status())
             routes = {
                 "/api/connect": lambda: service.connect(**body),
                 "/api/disconnect": lambda: service.disconnect(),
@@ -156,17 +146,10 @@ class Handler(BaseHTTPRequestHandler):
             }
             if self.path not in routes:
                 return self.respond({"error": "Deze actie bestaat niet."}, 404)
-            # Planning is a read-only comparison. Lap markers are covered by the
-            # explicitly approved recording session; neither changes a setup.
-            approved_record_marker = self.path == "/api/record" and body.get("action") == "lap" and service.session is not None
-            if self.path != "/api/plan" and not approved_record_marker:
-                self.server.owner.require(self.headers.get("X-Pit-Owner", ""))
             result = routes[self.path]()
-            if self.path != "/api/plan" and not approved_record_marker:
-                service.event("Eigenaar heeft actie goedgekeurd", self.path.removeprefix("/api/"))
+            if self.path != "/api/plan":
+                service.event("Lokale actie uitgevoerd", self.path.removeprefix("/api/"))
             self.respond(result if result is not None else {"ok": True})
-        except OwnerRequired as exc:
-            self.respond({"error": str(exc), "owner_required": True}, 401)
         except (ValueError, TypeError, RuntimeError, OSError) as exc:
             self.respond({"error": str(exc)}, 400)
 

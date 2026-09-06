@@ -1,5 +1,17 @@
 # Validatie — 6 september 2026
 
+## Laptop 0.3.1
+
+- 69 Python-tests geslaagd, inclusief lokale profielopslag zonder wachtwoord,
+  het negeren van oude wachtwoordgegevens en blokkeren van externe bediening,
+  ongeldige Origin, ontbrekende CSRF en onbekende schrijfroutes.
+- De zes tests voor de verwijderde wachtwoordmodule zijn vervallen; twee
+  HTTP-tests zijn aangepast en twee migratie-/routecontroles toegevoegd.
+- JavaScript-syntax gecontroleerd met Node.js. In Chromium zijn een demoronde
+  gestart en een profiel opgeslagen zonder wachtwoordvenster, met tijdelijke data.
+- Android blijft op 0.3.0; de APK en M5-firmware zijn voor deze wijziging niet
+  aangepast of opnieuw getest. Live CAN-schrijven blijft afwezig.
+
 ## Release 0.3.0
 
 Zie [STATUS-0.3.md](STATUS-0.3.md) voor de nieuwe functies, 73 Python-tests,

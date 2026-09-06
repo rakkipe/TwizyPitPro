@@ -1,5 +1,6 @@
 import http.client
 import json
+from pathlib import Path
 import tempfile
 import threading
 import unittest
@@ -13,9 +14,12 @@ class HttpTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp=tempfile.TemporaryDirectory()
+        # Upgrades must ignore old password state, including an unreadable record.
+        cls.legacy_owner=Path(cls.temp.name)/"security"/"owner.json"
+        cls.legacy_owner.parent.mkdir()
+        cls.legacy_owner.write_text("obsolete-password-record",encoding="utf-8")
         cls.service=PitService(cls.temp.name)
         cls.server=Server(("127.0.0.1",0),cls.service)
-        cls.server.owner.setup("test-owner-password")
         cls.thread=threading.Thread(target=cls.server.serve_forever,daemon=True)
         cls.thread.start()
         cls.host=f"127.0.0.1:{cls.server.server_port}"
@@ -29,18 +33,28 @@ class HttpTests(unittest.TestCase):
         response=connection.getresponse();data=response.read();status=response.status
         connection.close();return status,data
     def headers(self):
-        return {"Origin":"http://"+self.host,"X-Pit-CSRF":self.server.csrf,"Content-Type":"application/json","X-Pit-Owner":"test-owner-password"}
+        return {"Origin":"http://"+self.host,"X-Pit-CSRF":self.server.csrf,"Content-Type":"application/json"}
 
-    def test_owner_consent_required_even_with_csrf(self):
-        headers=self.headers();headers.pop("X-Pit-Owner")
-        status,data=self.request("POST","/api/profile",{"name":"Unapproved","values":self.service.current},headers)
-        self.assertEqual(status,401);self.assertTrue(json.loads(data)["owner_required"])
+    def test_local_profile_saved_without_password(self):
+        status,data=self.request("POST","/api/profile",{"name":"Local setup","values":self.service.current},self.headers())
+        self.assertEqual(status,200,data)
+        self.assertTrue(any(profile["name"]=="Local setup" for profile in self.service.profiles()))
 
-    def test_wrong_owner_password_cannot_change_demo(self):
+    def test_obsolete_password_header_is_ignored(self):
         headers=self.headers();headers["X-Pit-Owner"]="wrong-password"
         before=self.service.running
         status,_=self.request("POST","/api/demo",{"running":not before},headers)
-        self.assertEqual(status,401);self.assertEqual(self.service.running,before)
+        self.assertEqual(status,200);self.assertEqual(self.service.running,not before)
+    def test_password_state_is_unused_and_preserved(self):
+        status,data=self.request("GET","/api/security/status")
+        self.assertEqual(status,200)
+        self.assertEqual(json.loads(data),{"password_required":False,"local_control_only":True})
+        self.assertEqual(self.legacy_owner.read_text(encoding="utf-8"),"obsolete-password-record")
+    def test_password_setup_and_change_routes_removed(self):
+        for path in ("/api/security/setup","/api/security/change"):
+            with self.subTest(path=path):
+                status,_=self.request("POST",path,{"password":"unused-password"},self.headers())
+                self.assertEqual(status,404)
     def test_page_and_bootstrap(self):
         status,data=self.request("GET","/")
         self.assertEqual(status,200);self.assertIn(b"Twizy Pit Pro",data)

@@ -1,6 +1,6 @@
 # Beveiliging
 
-Versie 0.3.0 is een preview voor demo en uitlezen. Er is geen live tuning- of flashroute en er is geen onafhankelijke beveiligingsaudit uitgevoerd.
+Laptop 0.3.1 en Android 0.3.0 zijn previews voor demo en uitlezen. Er is geen live tuning- of flashroute en er is geen onafhankelijke beveiligingsaudit uitgevoerd.
 
 ## Een probleem melden
 
@@ -9,7 +9,7 @@ Gebruik **Security → Report a vulnerability** voor een vertrouwelijke melding.
 ## Beschermingsgrenzen
 
 - Android vraagt per goedgekeurde wijziging toestelcode of biometrie en koppelt de aanvraag aan een Keystore-handtekening. Opgeslagen appdata is versleuteld; exports zijn gewone leesbare bestanden.
-- De laptop vraagt per wijziging het eigenaarswachtwoord en controleert dat op de server. Een beheerder of iemand met toegang tot hetzelfde Windows-account kan de lokale installatie wijzigen.
+- De laptop heeft vanaf 0.3.1 geen appwachtwoord. Bediening vereist een lokale verbinding, geldige Host, dezelfde Origin en een sessiegebonden CSRF-token. Wie toegang heeft tot je Windows-sessie kan de app bedienen; de wifi-viewer blijft alleen lezen. Een beheerder of iemand met toegang tot hetzelfde Windows-account kan de lokale installatie wijzigen.
 - De laptopviewer gebruikt een tijdelijke sleutel over HTTP, zonder TLS. Gebruik een vertrouwd lokaal netwerk; publiceer die server niet op internet.
 - Openbare broncode kan worden geforkt. Controleer officiële APK's met de gepubliceerde SHA-256 en certificaatvingerafdruk. Een zelfgebouwde fork is geen officieel ondertekende update.
 - `android-signing/`, `data/`, `.env` en bouw-/releasebestanden horen niet in Git. De officiële signingsleutel is niet aanwezig in deze repository of de release.

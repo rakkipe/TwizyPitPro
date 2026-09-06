@@ -18,9 +18,6 @@ async function api(path, body){
   const headers={'X-Pit-Viewer':viewerToken};
   const config={headers};
   if(body !== undefined){Object.assign(headers,{'Content-Type':'application/json','X-Pit-CSRF':bootstrap?.csrf || ''});config.method='POST';config.body=JSON.stringify(body);}
-  if(body !== undefined && !path.startsWith('/api/security/') && path!=='/api/plan' && !(path==='/api/record'&&body.action==='lap'&&state?.session)) {
-    headers['X-Pit-Owner']=await ownerConsent();
-  }
   const response=await fetch(path,config);
   let result;
   try{result=await response.json();}catch{throw Error('Ongeldig serverantwoord. Controleer of Pit Pro nog draait.');}
@@ -137,31 +134,5 @@ function renderLaps(laps){const best= Math.min(...laps.map(l=>l.seconds));$('lap
 function renderLog(){$('event-list').innerHTML=state.events.map(e=>`<div class="event-row ${esc(e.level)}"><span class="event-time">${shortTime(e.at)}</span><div><strong>${esc(e.title)}</strong><p>${esc(e.detail)} · ${esc(e.mode.toUpperCase())}</p></div></div>`).join('');if(state.session)renderLaps(state.session.laps);}
 
 async function init(){try{bootstrap=await api('/api/bootstrap');await refresh();setPage(location.hash.slice(1)||'dashboard');setInterval(refresh,1000);}catch(error){toast(error.message,true);$('persistent-alert').hidden=false;$('persistent-alert').textContent=error.message;}}
-let ownerDialogBusy=false;
-async function ownerConsent(setupOnly=false){
-  if(ownerDialogBusy)throw Error('Er wacht al een eigenaarsbevestiging.');
-  const security=await api('/api/security/status');
-  if(security.retry_after)throw Error(`Te veel pogingen. Wacht ${security.retry_after} seconden.`);
-  if(ownerDialogBusy)throw Error('Er wacht al een eigenaarsbevestiging.');
-  ownerDialogBusy=true;
-  const dialog=document.createElement('dialog');
-  const setup=!security.configured;
-  dialog.innerHTML=`<form method="dialog" class="modal"><div class="eyebrow">EIGENAARSBEVEILIGING</div><h2>${setup?'Jouw pit. Jouw toestemming.':'Bevestig deze handeling.'}</h2><p class="muted">${setup?'Kies een privéwachtwoord van minimaal 8 tekens. Wijzigingen blijven geblokkeerd totdat je dit hebt ingesteld.':'Voer je eigenaarswachtwoord in. Je geeft toestemming voor één handeling.'}</p><label>Eigenaarswachtwoord<input id="owner-password" type="password" minlength="8" maxlength="128" autocomplete="${setup?'new-password':'off'}" required></label>${setup?'<label>Herhaal wachtwoord<input id="owner-repeat" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></label>':''}<button class="button primary full" value="approve">${setup?'Beveiliging instellen':'Goedkeuren'}</button><button class="button full" value="cancel" formnovalidate>Annuleren</button></form>`;
-  document.body.appendChild(dialog);dialog.showModal();dialog.querySelector('input').focus();
-  try{
-    const password=await new Promise((resolve,reject)=>{dialog.addEventListener('close',()=>{if(dialog.returnValue!=='approve')return reject(Error('Geannuleerd; niets gewijzigd.'));const value=dialog.querySelector('#owner-password').value;if(setup&&value!==dialog.querySelector('#owner-repeat').value)return reject(Error('Wachtwoorden komen niet overeen.'));resolve(value);},{once:true});});
-    if(setup){await api('/api/security/setup',{password});toast('Eigenaarsbeveiliging ingesteld.');}
-    return password;
-  }finally{dialog.querySelectorAll('input').forEach(input=>input.value='');dialog.remove();ownerDialogBusy=false;}
-}
-const ownerButton=document.createElement('button');ownerButton.className='button small';ownerButton.textContent='Beveiliging';ownerButton.setAttribute('aria-label','Eigenaarsbeveiliging');document.querySelector('.top-actions').prepend(ownerButton);
-const androidButton=document.createElement('button');androidButton.className='button small';androidButton.textContent='Android APK ↓';androidButton.onclick=()=>downloadAPI('/api/download/android','TwizyPitPro-0.2.0.apk').catch(e=>toast(e.message,true));$('phone-status').parentElement.appendChild(androidButton);
-ownerButton.onclick=async()=>{try{const status=await api('/api/security/status');if(!status.configured)await ownerConsent(true);else await changeOwnerPassword();}catch(e){toast(e.message,true);}};
-async function changeOwnerPassword(){
-  if(ownerDialogBusy)throw Error('Er wacht al een eigenaarsbevestiging.');ownerDialogBusy=true;
-  const dialog=document.createElement('dialog');dialog.innerHTML='<form method="dialog" class="modal"><div class="eyebrow">BEVEILIGING ACTIEF</div><h2>Jij houdt de controle.</h2><p class="muted">Elke wijziging vraagt je wachtwoord. Hieronder kun je een nieuw wachtwoord instellen.</p><label>Huidig wachtwoord<input name="current" type="password" minlength="8" maxlength="128" autocomplete="off" required></label><label>Nieuw wachtwoord<input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></label><label>Herhaal nieuw wachtwoord<input name="repeat" type="password" minlength="8" maxlength="128" autocomplete="new-password" required></label><button class="button primary full" value="change">Wachtwoord wijzigen</button><button class="button full" value="cancel" formnovalidate>Sluiten</button></form>';
-  document.body.appendChild(dialog);dialog.showModal();
-  try{await new Promise(resolve=>dialog.addEventListener('close',resolve,{once:true}));if(dialog.returnValue!=='change')return;const fields=dialog.querySelector('form').elements;if(fields.password.value!==fields.repeat.value)throw Error('Nieuwe wachtwoorden komen niet overeen.');await api('/api/security/change',{current:fields.current.value,password:fields.password.value});toast('Eigenaarswachtwoord gewijzigd.');}
-  finally{dialog.querySelectorAll('input').forEach(input=>input.value='');dialog.remove();ownerDialogBusy=false;}
-}
+const androidButton=document.createElement('button');androidButton.className='button small';androidButton.textContent='Android APK ↓';androidButton.onclick=()=>downloadAPI('/api/download/android','TwizyPitPro-0.3.0.apk').catch(e=>toast(e.message,true));$('phone-status').parentElement.appendChild(androidButton);
 init();

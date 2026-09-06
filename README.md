@@ -2,9 +2,9 @@
 
 # Twizy Pit Pro
 
-Een pitstudio voor Renault Twizy: een native Android-app en een Windows/laptop-GUI met diagnose, telemetrie, profielontwerp en eigenaarsgoedkeuring.
+Een pitstudio voor Renault Twizy: een native Android-app en een Windows/laptop-GUI met diagnose, telemetrie, profielontwerp en toestelgoedkeuring op Android.
 
-**0.3.0 is een preview voor demo en uitlezen. Live tuning, foutcodes wissen en firmware flashen zijn niet ingebouwd.** De 43 instelvelden bewerken een ontwerp; toepassen werkt alleen in de simulator. Er is nog geen test met een echte Twizy, telefoon of CAN-adapter uitgevoerd.
+**Laptop 0.3.1 en Android 0.3.0 zijn previews voor demo en uitlezen. Live tuning, foutcodes wissen en firmware flashen zijn niet ingebouwd.** De 43 instelvelden bewerken een ontwerp; toepassen werkt alleen in de simulator. Er is nog geen test met een echte Twizy, telefoon of CAN-adapter uitgevoerd.
 
 [Android APK downloaden](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.3.0) · [Android-handleiding](docs/ANDROID.md) · [Hardware](docs/HARDWARE.md) · [Validatie](docs/VALIDATIE.md)
 
@@ -22,7 +22,7 @@ Nieuw in 0.3: **75 registers voor alle 43 ontwerpvelden**, een volledige registe
 - Vier referentieschema's: **Twizy 45/80 × SEVCON 0712.0001/0712.0002**. Identiteit en revisie moeten passen; onbekende combinaties en 0712.0003+ blokkeren demo-toepassing.
 - Een CANopen-leespad voor **vLinker FS via USB** of **M5StickC Plus2 + CAN Unit U085** met de meegeleverde PitBridge-firmware. Uitlezing van controlleridentiteit, firmware en beschikbare diagnosewaarden. Adapterwerking is nog niet op fysieke hardware bevestigd.
 - Profielen, sessies, handmatige rondemarkeringen en CSV-/JSON-export. Android heeft optionele GPS-registratie zolang de app op de voorgrond staat.
-- Goedkeuring per opgeslagen wijziging: Android-biometrie/toestelcode met Keystore en versleutelde opslag; op de laptop een zelf ingesteld eigenaarswachtwoord.
+- Android: goedkeuring per opgeslagen wijziging met biometrie/toestelcode, Keystore en versleutelde opslag. De laptop bedien je zonder appwachtwoord; de wifi-viewer kan alleen lezen.
 - Een eigen appicoon en een telefoonviewer voor het dashboard van de laptop.
 
 Controllerherkenning bewijst niet welke reductiekast of mechanische uitvoering gemonteerd is. De simulator gebruikt fictieve identiteit en synthetische meetwaarden en voorspelt geen circuitprestaties. Versiepakketten zijn referentieschema's, geen gegenereerde ECU-firmware.
@@ -44,7 +44,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Start.ps1 -LocalOnly
 ```
 
-Open daarna `http://127.0.0.1:8765`. Stel via **Beveiliging** je eigen wachtwoord in. Zonder dat wachtwoord zijn wijzigingen geblokkeerd. De installatie maakt een snelkoppeling **in de projectmap**; je kunt die naar je bureaublad kopiëren.
+Open daarna `http://127.0.0.1:8765`. De laptop vraagt geen appwachtwoord. Wie toegang heeft tot je Windows-sessie kan de app bedienen. De installatie maakt een snelkoppeling **in de projectmap**; je kunt die naar je bureaublad kopiëren.
 
 `Start.vbs` of `Start.ps1` zonder `-LocalOnly` maakt de telefoonviewer beschikbaar op het lokale netwerk. Gebruik daarvoor je eigen hotspot of vertrouwd wifi: deze viewer gebruikt HTTP met een tijdelijke toegangssleutel, zonder TLS. Firewallregels worden niet automatisch gewijzigd.
 
@@ -70,11 +70,11 @@ De laptop gebruikt Python, standaardbibliotheek HTTP en `pyserial==3.5`. De Andr
 
 De ongetekende APK staat onder `android/build/aligned.apk`; de getekende onder `releases/android/`. Initialisatie maakt **jouw eigen** lokale sleutel. Daarmee kun je de officiële APK niet als update vervangen. Bewaar eigen sleutels buiten Git. De scripts downloaden bouwafhankelijkheden; de voor 0.2.0 gebruikte versies staan in [de bouwregistratie](docs/android-build-dependencies.json). Het setupscript kiest de nieuwste Java 21-release en kan bij een latere uitvoering andere bouwtools ophalen; een identieke binaire rebuild is niet gegarandeerd.
 
-De 73 Python-tests en 26 Android-kerncontroles zijn geslaagd; de ondertekende APK en goedkeuringsflow zijn in een Android 11-emulator getest. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python-tests uit. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
+Voor laptop 0.3.1 zijn 69 Python-tests geslaagd. Voor de ongewijzigde Android-app 0.3.0 waren 26 kerncontroles geslaagd; de ondertekende APK en goedkeuringsflow zijn in een Android 11-emulator getest. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python-tests uit. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
 
 ## Veiligheid, gegevens en bijdragen
 
-Goedkeuring beschermt de gebruiksinstallatie. Een openbare MIT-repository kan door anderen worden gekopieerd en gewijzigd; dat verandert jouw geïnstalleerde app niet. Iedereen met de toestelcode of geregistreerde biometrie kan op dat toestel goedkeuren. Deze release heeft geen onafhankelijke beveiligingsaudit gehad.
+Op Android beschermt toestelgoedkeuring de gebruiksinstallatie. Een openbare MIT-repository kan door anderen worden gekopieerd en gewijzigd; dat verandert jouw geïnstalleerde app niet. Iedereen met de toestelcode of geregistreerde biometrie kan op dat toestel goedkeuren. Deze release heeft geen onafhankelijke beveiligingsaudit gehad.
 
 Lokale data, exports, wachtwoorden, signingmateriaal, bouwtools en test-APK's worden uitgesloten van Git. Handmatige CSV-/JSON-exports zijn leesbare bestanden. Deel geen ongefilterde voertuiglogs of sleutels in issues. Zie [SECURITY.md](SECURITY.md) en [CONTRIBUTING.md](CONTRIBUTING.md).
 

@@ -91,17 +91,14 @@ ondertekend. Een nieuwe Windows-installatie kan de DPAPI-kopie onbruikbaar maken
 
 ## Laptopbeveiliging
 
-De laptopversie vraagt een eigen wachtwoord (8–128 tekens) dat jij bij eerste
-gebruik instelt via **Beveiliging**. Zonder ingesteld wachtwoord zijn mutaties
-geblokkeerd. Elke actie vereist opnieuw dat wachtwoord; vergelijken en reeds
-toegestane rondemarkeringen zijn geen wijziging van een afstelling. De server
-controleert dit zelf; het is geen cosmetische blokkering in de browser.
+Vanaf laptopversie 0.3.1 is er geen appwachtwoord of wachtwoordvraag per actie.
+Bediening is alleen toegestaan via een lokale verbinding met geldige Host,
+dezelfde Origin en een sessiegebonden CSRF-token. Wie toegang heeft tot je
+Windows-sessie kan de app bedienen. Een bestaand lokaal wachtwoordbestand uit
+0.3.0 wordt niet meer gebruikt en blijft behouden bij een update.
 
-PBKDF2-HMAC-SHA256, 600.000 iteraties, willekeurig salt en constante-tijdvergelijking.
-Na vijf verkeerde pogingen volgt vijf minuten blokkering, ook na een serverherstart.
-Wachtwoorden worden niet in logboeken of browseropslag opgeslagen. Wijzig je
-wachtwoord via **Beveiliging** met je huidige wachtwoord. De telefoonviewer blijft
-alleen lezen en kan de laptop niet ontgrendelen.
+De wifi-viewer blijft alleen lezen. De native Android-app 0.3.0 blijft voor
+wijzigingen de Android-toestelcode of biometrie vragen.
 
 De laptopviewer gebruikt HTTP met een tijdelijke kijktoegangssleutel. Gebruik
 uitsluitend je eigen hotspot of vertrouwd wifi; verkeer is daar niet met TLS
