@@ -187,10 +187,10 @@ class ServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.apply_demo(plan["id"])
 
-    def test_live_apply_is_always_blocked(self):
+    def test_simulator_endpoint_cannot_write_to_vehicle(self):
         plan=self.plan(drive=85)
         self.service.mode="live"
-        with self.assertRaisesRegex(ValueError,"niet geïmplementeerd"):
+        with self.assertRaisesRegex(ValueError,"alleen de simulator"):
             self.service.apply_demo(plan["id"])
 
     def test_drive_and_fault_guards(self):
