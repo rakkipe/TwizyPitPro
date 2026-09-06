@@ -4,14 +4,16 @@
 
 Een pitstudio voor Renault Twizy: een native Android-app en een Windows/laptop-GUI met diagnose, telemetrie, profielontwerp en eigenaarsgoedkeuring.
 
-**0.2.0 is een preview voor demo en uitlezen. Live tuning, foutcodes wissen en firmware flashen zijn niet ingebouwd.** De 43 instelvelden bewerken een ontwerp; toepassen werkt alleen in de simulator. Er is nog geen test met een echte Twizy, telefoon of CAN-adapter uitgevoerd.
+**0.3.0 is een preview voor demo en uitlezen. Live tuning, foutcodes wissen en firmware flashen zijn niet ingebouwd.** De 43 instelvelden bewerken een ontwerp; toepassen werkt alleen in de simulator. Er is nog geen test met een echte Twizy, telefoon of CAN-adapter uitgevoerd.
 
-[Android APK downloaden](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.2.0) · [Android-handleiding](docs/ANDROID.md) · [Hardware](docs/HARDWARE.md) · [Validatie](docs/VALIDATIE.md)
+[Android APK downloaden](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.3.0) · [Android-handleiding](docs/ANDROID.md) · [Hardware](docs/HARDWARE.md) · [Validatie](docs/VALIDATIE.md)
 
 <p align="center">
   <img src="docs/images/android-tuning.png" width="280" alt="Native Android tuningstudio in demo">
   <img src="docs/images/android-profiles.png" width="280" alt="Native Android profielbeheer">
 </p>
+
+Nieuw in 0.3: **75 registers voor alle 43 ontwerpvelden**, een volledige registervergelijking in beide GUI's en uitgebreidere CAN-uitlezing. [Wat werkt en wat nog ontbreekt](docs/STATUS-0.3.md).
 
 ## Wat zit erin?
 
@@ -27,7 +29,7 @@ Controllerherkenning bewijst niet welke reductiekast of mechanische uitvoering g
 
 ## Android installeren
 
-1. Download `TwizyPitPro-0.2.0.apk` bij de [release](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.2.0).
+1. Download `TwizyPitPro-0.3.0.apk` bij de [release](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.3.0).
 2. Open het bestand op je telefoon en geef die bestandsapp zo nodig toestemming om apps te installeren.
 3. Start **Twizy Pit Pro**. De app opent in demo. Stel een eigen toestelcode of biometrie in om wijzigingen te kunnen bewaren.
 
@@ -46,17 +48,17 @@ Open daarna `http://127.0.0.1:8765`. Stel via **Beveiliging** je eigen wachtwoor
 
 `Start.vbs` of `Start.ps1` zonder `-LocalOnly` maakt de telefoonviewer beschikbaar op het lokale netwerk. Gebruik daarvoor je eigen hotspot of vertrouwd wifi: deze viewer gebruikt HTTP met een tijdelijke toegangssleutel, zonder TLS. Firewallregels worden niet automatisch gewijzigd.
 
-Wil je de APK via de laptopknop aanbieden, plaats dan het releasebestand in `releases/android/TwizyPitPro-0.2.0.apk`. APK's en persoonlijke gegevens zitten niet in de Git-broncode.
+Wil je de APK via de laptopknop aanbieden, plaats dan het releasebestand in `releases/android/TwizyPitPro-0.3.0.apk`. APK's en persoonlijke gegevens zitten niet in de Git-broncode.
 
 ## Ontwikkelen en testen
 
 De laptop gebruikt Python, standaardbibliotheek HTTP en `pyserial==3.5`. De Android-app gebruikt Java, Android SDK 35 en USB Serial for Android 3.10.0; de Windows-buildscripts werken zonder Gradle.
 
 ```powershell
-# Na Install.ps1: de 55 offline Python-tests
+# Na Install.ps1: de 73 offline Python-tests
 .\.venv\Scripts\python.exe -m unittest discover -s tests -q
 
-# Android: bouwtools downloaden, ongetekend bouwen, 19 kerncontroles
+# Android: bouwtools downloaden, ongetekend bouwen, 26 kerncontroles
 .\.venv\Scripts\python.exe scripts\setup_android.py
 .\android\Build.ps1 -Unsigned
 .\.venv\Scripts\python.exe scripts\test_android.py
@@ -68,7 +70,7 @@ De laptop gebruikt Python, standaardbibliotheek HTTP en `pyserial==3.5`. De Andr
 
 De ongetekende APK staat onder `android/build/aligned.apk`; de getekende onder `releases/android/`. Initialisatie maakt **jouw eigen** lokale sleutel. Daarmee kun je de officiële APK niet als update vervangen. Bewaar eigen sleutels buiten Git. De scripts downloaden bouwafhankelijkheden; de voor 0.2.0 gebruikte versies staan in [de bouwregistratie](docs/android-build-dependencies.json). Het setupscript kiest de nieuwste Java 21-release en kan bij een latere uitvoering andere bouwtools ophalen; een identieke binaire rebuild is niet gegarandeerd.
 
-De 55 Python-tests en 19 Android-kerncontroles zijn geslaagd; de ondertekende APK en goedkeuringsflow zijn in een Android 11-emulator getest. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python-tests uit. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
+De 73 Python-tests en 26 Android-kerncontroles zijn geslaagd; de ondertekende APK en goedkeuringsflow zijn in een Android 11-emulator getest. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python-tests uit. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
 
 ## Veiligheid, gegevens en bijdragen
 

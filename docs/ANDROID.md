@@ -1,4 +1,4 @@
-# Twizy Pit Pro voor Android — 0.2.0
+# Twizy Pit Pro voor Android — 0.3.0
 
 Een native Android-app, met eigen Java-schermen, offline simulator, versleutelde
 opslag en USB-hostondersteuning. De APK bevat de app zelf en start zonder laptop
@@ -7,7 +7,7 @@ de Nothing/CMF-telefoon en de voertuigadapters zijn nog niet fysiek getest.
 
 ## Installeren
 
-1. Download `TwizyPitPro-0.2.0.apk` bij de [officiële release](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.2.0)
+1. Download `TwizyPitPro-0.3.0.apk` bij de [officiële release](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.3.0)
    en kopieer hem naar je telefoon, bijvoorbeeld via USB.
 2. Open de APK in Bestanden. Geef die bestandsapp desgevraagd toestemming om
    apps uit deze bron te installeren en kies Installeren.
@@ -20,6 +20,8 @@ laptop-app. Plaats de release-APK eerst in `releases/android/` van de laptop-app
 De knop **Android APK ↓** haalt deze APK dan op via de lokale laptop.
 De laptop moet bereikbaar zijn op hetzelfde vertrouwde netwerk. Er worden geen
 firewallregels automatisch gewijzigd.
+
+Nieuw in 0.3: registerdoelen en scanvergelijking voor alle 43 velden / 75 registers, automatische editorselectie op USB-identiteit en passieve CAN-uitlezing. Zie [de actuele status](STATUS-0.3.md).
 
 ## Functies
 

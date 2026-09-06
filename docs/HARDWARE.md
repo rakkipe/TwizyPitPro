@@ -33,6 +33,10 @@ diagnose. Na 1,5 seconde zonder vervolg keert hij terug naar listen-only.
 Protocol: `HELLO` → `PITBRIDGE 1 READONLY`; `READ <16 hextekens>` →
 `RX 581 <16 hextekens>` of `ERR ...`. Alleen upload-initiate en de bijbehorende
 uploadsegmenten worden doorgelaten. Geen NMT, willekeurige TX, login of writes.
+Versie 0.3 voegt `CAPTURE` toe: 1,2 seconde uitsluitend listen-only, gevolgd door
+maximaal zes `FRAME <CAN-ID> <16 hextekens>`-regels en `CAPTURE END`.
+Bij gemiste frames, overflow of CAN-fouten wordt de opname verworpen.
+Oudere PitBridge-firmware blijft bruikbaar voor SDO-uitlezing en mist deze opname.
 De firmware is niet uitwisselbaar met eerdere M5CanBridge- of Powerbox-protocollen.
 
 Build met Arduino CLI (gecontroleerd met esp32 core 3.3.10, M5Unified 0.2.18

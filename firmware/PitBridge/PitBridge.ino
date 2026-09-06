@@ -15,6 +15,32 @@ static uint32_t lastRead = 0, frames = 0, shown = 0;
 static String input;
 static uint8_t pendingIndex[3];
 
+static void handleCapture() {
+  segmented=false;
+  if(!startBus(false)) { Serial.println("ERR CAN_INIT"); return; }
+  const uint16_t ids[]={0x155,0x554,0x55f,0x597,0x599,0x59b};
+  uint8_t saved[6][8]={}; bool valid[6]={};
+  twai_status_info_t before={},after={};
+  if(twai_get_status_info(&before)!=ESP_OK) {Serial.println("ERR CAN_STATUS");return;}
+  uint32_t started=millis();
+  while((uint32_t)(millis()-started)<1200) {
+    twai_message_t frame;
+    if(twai_receive(&frame,pdMS_TO_TICKS(10))!=ESP_OK)continue;
+    ++frames;
+    if(frame.extd||frame.rtr||frame.data_length_code!=8)continue;
+    for(int i=0;i<6;i++) if(frame.identifier==ids[i]) {memcpy(saved[i],frame.data,8);valid[i]=true;}
+  }
+  if(twai_get_status_info(&after)!=ESP_OK||after.state!=TWAI_STATE_RUNNING||after.rx_missed_count!=before.rx_missed_count||after.rx_overrun_count!=before.rx_overrun_count||after.bus_error_count!=before.bus_error_count) {
+    Serial.println("ERR CAPTURE_CAN_ERRORS");return;
+  }
+  for(int i=0;i<6;i++)if(valid[i]) {
+    Serial.printf("FRAME %03X ",ids[i]);
+    for(int j=0;j<8;j++)Serial.printf("%02X",saved[i][j]);
+    Serial.println();
+  }
+  Serial.println("CAPTURE END");
+}
+
 static bool startBus(bool readMode) {
   if (installed) { twai_stop(); twai_driver_uninstall(); installed = false; }
   twai_general_config_t general = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX, CAN_RX,
@@ -119,6 +145,7 @@ void loop() {
     char c=(char)Serial.read();
     if(c=='\n') {
       if(input=="HELLO") Serial.println("PITBRIDGE 1 READONLY");
+      else if(input=="CAPTURE") handleCapture();
       else handleRead(input);
       input="";
     } else if(c!='\r') {

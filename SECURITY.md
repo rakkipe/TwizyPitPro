@@ -1,6 +1,6 @@
 # Beveiliging
 
-Versie 0.2.0 is een preview voor demo en uitlezen. Er is geen live tuning- of flashroute en er is geen onafhankelijke beveiligingsaudit uitgevoerd.
+Versie 0.3.0 is een preview voor demo en uitlezen. Er is geen live tuning- of flashroute en er is geen onafhankelijke beveiligingsaudit uitgevoerd.
 
 ## Een probleem melden
 

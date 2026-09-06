@@ -1,2 +1,2 @@
 """Twizy Pit Pro — local engineering workbench."""
-VERSION = "0.2.0-owner"
+VERSION = "0.3.0-preview"

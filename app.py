@@ -95,7 +95,7 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/sessions":
                     return self.respond(service.sessions())
                 if path == "/api/download/android":
-                    apk = ROOT / "releases" / "android" / "TwizyPitPro-0.2.0.apk"
+                    apk = ROOT / "releases" / "android" / "TwizyPitPro-0.3.0.apk"
                     if not apk.is_file():
                         return self.respond({"error": "Android-APK nog niet beschikbaar."}, 404)
                     return self.respond(apk.read_bytes(), content_type="application/vnd.android.package-archive", attachment=apk.name)

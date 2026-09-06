@@ -1,5 +1,11 @@
 # Validatie — 6 september 2026
 
+## Release 0.3.0
+
+Zie [STATUS-0.3.md](STATUS-0.3.md) voor de nieuwe functies, 73 Python-tests,
+26 Android-controles, GUI-validatie en resterende hardware- en schrijfwerkzaamheden.
+De onderstaande controles en APK-hash horen specifiek bij de eerdere 0.2.0-release.
+
 ## Release 0.2.0: Android en eigenaarsbeveiliging
 
 - 55 Python-tests geslaagd, inclusief server-side eigenaarsgoedkeuring,

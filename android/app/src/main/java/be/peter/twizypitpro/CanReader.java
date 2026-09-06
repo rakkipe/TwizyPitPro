@@ -14,8 +14,11 @@ final class CanReader implements Closeable {
     private final UsbSerialPort port;
     private final boolean m5;
     private final Transport transport;
-    CanReader(UsbSerialPort port,boolean m5){this.port=port;this.m5=m5;this.transport=this::serialExchange;}
-    CanReader(Transport transport){this.port=null;this.m5=false;this.transport=transport;}
+    private final Model model;
+    private boolean captureSupported=true;
+    CanReader(UsbSerialPort port,boolean m5,Model model){this.port=port;this.m5=m5;this.model=model;this.transport=this::serialExchange;}
+    CanReader(Transport transport){this(transport,null);}
+    CanReader(Transport transport,Model model){this.port=null;this.m5=false;this.model=model;this.transport=transport;}
     void initialize() throws IOException {
         if(m5) {
             SystemClock.sleep(1500);
@@ -42,14 +45,16 @@ final class CanReader implements Closeable {
             if(out.size()>32768)throw new IOException("Adapterantwoord te groot.");
             String text=out.toString("US-ASCII");
             if(!m5&&text.contains(">"))return text;
-            if(m5&&(text.contains("PITBRIDGE 1 READONLY")||text.contains("RX ")||text.contains("ERR"))&&text.contains("\n"))return text;
+            if(m5&&text.contains("\n")&&(text.contains("ERR")||(command.equals("CAPTURE")?text.contains("CAPTURE END"):text.contains("PITBRIDGE 1 READONLY")||text.contains("RX "))))return text;
         }
         throw new IOException("Geen passend adapterantwoord; controleer USB en CAN.");
     }
     static boolean allowed(byte[] payload){return payload.length==8&&(payload[0]==0x40||payload[0]==0x60||payload[0]==0x70);}
     private byte[] exchange(byte[] payload,Predicate<byte[]> match) throws IOException {
         if(!allowed(payload))throw new IOException("Uitsluitend SDO-upload toegestaan.");
-        return transport.exchange(payload,match);
+        byte[] response=transport.exchange(payload,match);
+        if(response==null||response.length!=8||!match.test(response))throw new IOException("Ongeldig of niet-passend SDO-antwoord.");
+        return response;
     }
     private byte[] serialExchange(byte[] payload,Predicate<byte[]> match) throws IOException {
         if(!allowed(payload))throw new IOException("Schrijfcommando geblokkeerd.");
@@ -120,8 +125,17 @@ final class CanReader implements Closeable {
         }catch(IOException e){errors.put(e.getMessage());}
         JSONObject id=report.optJSONObject("identity");String model=Model.modelOf(id);
         if(Model.known(model,id.optString("software"),id.optLong("revision"))) {
-            int[][] typed={{0x2920,1,2},{0x2920,3,2},{0x2920,4,2},{0x291c,2,2},{0x2920,7,2},{0x2920,11,2},{0x2920,13,2},{0x2920,14,2},{0x2920,15,2},{0x2920,16,2},{0x290a,3,2},{0x290a,1,1}};
-            for(int[] reg:typed)try{row(rows,reg[0],reg[1],reg[2],number(reg[0],reg[1],reg[2],false));}catch(IOException e){errors.put(e.getMessage());}
+            if(this.model==null)errors.put("Registercatalogus ontbreekt.");
+            else {
+                JSONArray inventory=Tuning.targets(this.model,this.model.defaults(model),model,null);
+                Model.put(report,"inventory_count",inventory.length());
+                for(int i=0;i<inventory.length();i++){
+                    JSONObject r=inventory.optJSONObject(i);r.remove("raw");
+                    try {Model.put(r,"raw",number(r.optInt("index"),r.optInt("sub"),r.optInt("width"),r.optBoolean("signed")));Model.put(r,"source","live");}
+                    catch(IOException e){Model.put(r,"raw",JSONObject.NULL);Model.put(r,"error",e.getMessage());errors.put(e.getMessage());}
+                    rows.put(r);
+                }
+            }
         }
         Model.put(report,"registers",rows);Model.put(report,"errors",errors);Model.put(report,"complete",errors.length()==0&&id.optJSONArray("errors").length()==0);
         Model.put(report,"scope","SEVCON CANopen. Geen volledige Renault ECU/BMS/airbagscan. Fouthistorie is niet automatisch een actuele storing.");return report;
@@ -133,7 +147,40 @@ final class CanReader implements Closeable {
         for(int i=0;i<3;i++)try{Model.put(sample,names[i],number(regs[i][0],regs[i][1],regs[i][2],true));}catch(IOException e){errors.put(e.getMessage());}
         if(sample.length()==0)throw new IOException("Geen actuele telemetrie; uitlezing gestopt.");
         if(!m5)try{java.util.regex.Matcher match=java.util.regex.Pattern.compile("(\\d{1,2}\\.\\d{1,2})V",2).matcher(command("ATRV",1800));if(match.find())Model.put(sample,"aux",Double.parseDouble(match.group(1)));}catch(IOException e){errors.put(e.getMessage());}
+        try{JSONObject decoded=CanTelemetry.decode(capture());Iterator<String> keys=decoded.keys();while(keys.hasNext()){String key=keys.next();Model.put(sample,key,decoded.opt(key));}}catch(IOException e){errors.put("CAN-broadcasts: "+e.getMessage());}
         Model.put(sample,"source","live-usb");Model.put(sample,"at",Model.now());Model.put(sample,"errors",errors);return sample;
+    }
+    private String monitor(int duration) throws IOException {
+        try{port.purgeHwBuffers(false,true);}catch(UnsupportedOperationException ignored){}
+        port.write("ATMA\r".getBytes(StandardCharsets.US_ASCII),1000);
+        ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[1024];boolean prompt=false;
+        long end=System.nanoTime()+duration*1000000L;
+        try {
+            while(System.nanoTime()<end){int n=port.read(b,100);if(n>0)out.write(b,0,n);if(out.size()>65536)throw new IOException("CAN-monitorbuffer te groot");if(out.toString("US-ASCII").contains(">")){prompt=true;break;}}
+        } finally {
+            if(!prompt){port.write(new byte[]{13},1000);long stop=System.nanoTime()+1500000000L;
+                while(System.nanoTime()<stop){int n=port.read(b,100);if(n>0)out.write(b,0,n);if(out.size()>98304)throw new IOException("CAN-monitorbuffer overschreden");if(out.toString("US-ASCII").contains(">")){prompt=true;break;}}
+                if(!prompt)throw new IOException("CAN-monitor stopt niet; verbind opnieuw");
+            }
+        }
+        String text=out.toString("US-ASCII");String upper=text.toUpperCase(Locale.ROOT);
+        for(String error:new String[]{"BUFFER FULL","CAN ERROR","BUS ERROR","BUS OFF","?"})if(upper.contains(error))throw new IOException("CAN-monitorfout; opname verworpen");
+        return text;
+    }
+    private Map<Integer,byte[]> capture() throws IOException {
+        if(m5){
+            if(!captureSupported)return new LinkedHashMap<>();
+            String text=command("CAPTURE",2600);
+            if(text.contains("ERR FORMAT")||text.contains("ERR UPLOAD_ONLY")){captureSupported=false;return new LinkedHashMap<>();}
+            if(text.contains("ERR")||!text.contains("CAPTURE END"))throw new IOException("PitBridge-capture mislukt");
+            return CanTelemetry.parse(text);
+        }
+        try {
+            for(String cmd:new String[]{"ATCSM1","ATCM700","ATCF500"})if(!command(cmd,1800).contains("OK"))throw new IOException("Monitorconfiguratie geweigerd: "+cmd);
+            Map<Integer,byte[]> frames=CanTelemetry.parse(monitor(1150));
+            if(!command("ATCRA155",1800).contains("OK"))throw new IOException("BMS-filter geweigerd");
+            frames.putAll(CanTelemetry.parse(monitor(150)));return frames;
+        } finally {if(!command("ATCRA581",1800).contains("OK"))throw new IOException("SDO-filter herstellen mislukt; verbind opnieuw");}
     }
     @Override public void close() throws IOException {if(port!=null)port.close();}
 }

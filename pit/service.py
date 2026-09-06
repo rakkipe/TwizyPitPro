@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 
 from .catalog import compatibility, defaults, fingerprint, parameters, sdo_candidates, validate, variant_bundle
 from .canopen import BusError, ElmLink, M5Link, SDO
+from .tuning import register_inventory, compare_snapshot, targets
+from .telemetry import decode_frames
 
 
 def now():
@@ -156,6 +158,13 @@ class PitService:
                 sample["aux"] = link.voltage()
             except BusError as exc:
                 sample["errors"].append(str(exc))
+            try:
+                decoded=decode_frames(link.capture())
+                sample.update({k:v for k,v in decoded.items() if k!="source"})
+                sample["can_capture_at"]=now()
+            except BusError as exc:
+                sample["errors"].append("CAN-broadcasts: "+str(exc))
+            sample["at"]=now()
             with self.lock:
                 self.sample = sample
                 self._append_sample()
@@ -258,6 +267,7 @@ class PitService:
                     self.identity = client.identity()
                     self.identity["source"] = "live"
                     report["identity"] = self.identity.copy()
+                    if self.identity.get("errors"): report["complete"]=False
                     for index, sub, width, title in ((0x1001, 0, 1, "CANopen error register"), (0x6041, 0, 2, "Statusword"), (0x1003, 0, 1, "Aantal opgeslagen fouten")):
                         try:
                             value = client.number(index, sub, width)
@@ -272,10 +282,10 @@ class PitService:
                             report["observations"].append(dict(name=title, status="unknown", text=str(exc)))
                     comp = compatibility(self.identity)
                     if comp["known"]:
-                        for row in sdo_candidates(defaults(comp["model"]), comp["model"]):
+                        for row in register_inventory(comp["model"]):
                             row = dict(row)
                             try:
-                                row["raw"] = client.number(row["index"], row["sub"], row["width"])
+                                row["raw"] = client.number(row["index"], row["sub"], row["width"], row.get("signed",False))
                                 row["source"] = "live"
                             except BusError as exc:
                                 row["raw"] = None
@@ -283,6 +293,9 @@ class PitService:
                                 report["complete"] = False
                             report["registers"].append(row)
                     report["scope"] = "SEVCON CANopen en beschikbare SDO's. Geen volledige Renault ECU/airbag/BMS-DTC-scan. Fouthistorie is niet automatisch een actuele storing."
+                    report["inventory_count"]=len(register_inventory(comp["model"])) if comp["known"] else 0
+                    report["fingerprint"]=fingerprint(self.identity)
+                    report["power_map_commit"]={"address":"4641:01","access":"write-only","readback":False}
             with self.lock:
                 self.scan = report
                 atomic_json(self.directory / "scans" / f"{uuid.uuid4().hex}.json", report)
@@ -337,11 +350,14 @@ class PitService:
             if not changes:
                 blockers.append("Geen gewijzigde instellingen.")
             keys = {c["key"] for c in changes}
-            candidates = [r for r in sdo_candidates(values, model) if r["key"] in keys]
+            snapshot=self.scan if self.scan and self.scan.get("mode")=="live" and fingerprint(self.scan.get("identity",{}))==comp["fingerprint"] else None
+            register_targets=compare_snapshot(values,model,snapshot["registers"] if snapshot else [])
+            candidates=[r for r in register_targets if keys.intersection(r["keys"])]
             plan = dict(id=uuid.uuid4().hex, at=now(), revision=self.revision, fingerprint=comp["fingerprint"],
                         values=values, changes=changes, blockers=blockers, can_simulate=not blockers,
                         candidates=candidates, expires_in=60, mode=self.mode,
-                        warning="SDO-kandidaten zijn onvolledig: macrodoelen, afhankelijke kaarten en hardwarekwalificatie ontbreken. Dit is geen uitvoerbaar voertuigschrijfplan.")
+                        register_targets=register_targets, mapped_fields=len({k for r in register_targets for k in r["keys"]}),
+                        warning="Alle 43 velden zijn vertaald naar registerdoelen. Werkelijke beginwaarden komen alleen uit een identiteitsgebonden scan. Dit is geen uitvoerbare schrijfvolgorde; hardwarekwalificatie, eigenaarstoestemming, verse CAN-controles en kaartcommit blijven vereist.")
             self.plan = dict(plan, deadline=self.clock()+60)
             return plan
 

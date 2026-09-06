@@ -4,7 +4,7 @@ import os,subprocess,zipfile,shutil,json
 ROOT=Path(__file__).resolve().parents[1];TOOLS=ROOT/'android-tools';BUILD=ROOT/'android/build'
 jdk=next((TOOLS/'jdk').glob('*/bin'));bt=TOOLS/'sdk/build-tools/35.0.0';adb=TOOLS/'sdk/platform-tools/adb.exe'
 os.environ['ANDROID_SDK_HOME']=str(TOOLS/'user')
-apk=ROOT/'releases/android/TwizyPitPro-0.2.0.apk'
+apk=ROOT/'releases/android/TwizyPitPro-0.3.0.apk'
 tampered=BUILD/'tampered-test.apk';shutil.copy2(apk,tampered)
 with zipfile.ZipFile(tampered,'a') as z:z.writestr('assets/unauthorized-test.txt','signature integrity test')
 verify=subprocess.run([str(jdk/'java.exe'),'-jar',str(bt/'lib/apksigner.jar'),'verify',str(tampered)],capture_output=True,text=True)
