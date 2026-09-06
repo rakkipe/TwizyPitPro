@@ -1,5 +1,18 @@
 # Validatie — 6 september 2026
 
+## Laptop 0.3.2
+
+- 74 Python-tests: vijf nieuwe M5-protocoltests, waaronder twaalf gesimuleerde
+  Twizy-model-/versiecombinaties via de echte M5Link-, SDO- en serviceroute.
+- Basisdiagnose blijft bereikbaar bij onbekende firmware; ontbrekende versie
+  blijft onbekend. Afgewezen registers maken een volgende leesaanvraag niet stuk.
+- Oude PitBridge 1 zonder CAPTURE blijft uitlezen. Een regressietest toonde aan
+  dat CAPTURE na een firmwarewissel ten onrechte uitgeschakeld bleef; opnieuw
+  verbinden detecteert die mogelijkheid nu opnieuw.
+- Live verbinding gebruikt de uitgelezen identiteit en negeert demo-keuzes.
+- Geen M5- of voertuigflash uitgevoerd. M5-firmware en Android-APK zijn voor
+  deze laptopwijziging ongewijzigd; fysieke compatibiliteit blijft onbevestigd.
+
 ## Laptop 0.3.1
 
 - 69 Python-tests geslaagd, inclusief lokale profielopslag zonder wachtwoord,

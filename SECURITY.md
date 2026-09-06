@@ -1,6 +1,6 @@
 # Beveiliging
 
-Laptop 0.3.1 en Android 0.3.0 zijn previews voor demo en uitlezen. Er is geen live tuning- of flashroute en er is geen onafhankelijke beveiligingsaudit uitgevoerd.
+Laptop 0.3.2 en Android 0.3.0 zijn previews voor demo en uitlezen. Er is geen live tuning- of flashroute en er is geen onafhankelijke beveiligingsaudit uitgevoerd.
 
 ## Een probleem melden
 

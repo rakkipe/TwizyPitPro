@@ -4,7 +4,7 @@
 
 Een pitstudio voor Renault Twizy: een native Android-app en een Windows/laptop-GUI met diagnose, telemetrie, profielontwerp en toestelgoedkeuring op Android.
 
-**Laptop 0.3.1 en Android 0.3.0 zijn previews voor demo en uitlezen. Live tuning, foutcodes wissen en firmware flashen zijn niet ingebouwd.** De 43 instelvelden bewerken een ontwerp; toepassen werkt alleen in de simulator. Er is nog geen test met een echte Twizy, telefoon of CAN-adapter uitgevoerd.
+**Laptop 0.3.2 en Android 0.3.0 zijn previews voor demo en uitlezen. Live tuning, foutcodes wissen en firmware flashen zijn niet ingebouwd.** De 43 instelvelden bewerken een ontwerp; toepassen werkt alleen in de simulator. Er is nog geen test met een echte Twizy, telefoon of CAN-adapter uitgevoerd.
 
 [Android APK downloaden](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.3.0) · [Android-handleiding](docs/ANDROID.md) · [Hardware](docs/HARDWARE.md) · [Validatie](docs/VALIDATIE.md)
 
@@ -70,7 +70,7 @@ De laptop gebruikt Python, standaardbibliotheek HTTP en `pyserial==3.5`. De Andr
 
 De ongetekende APK staat onder `android/build/aligned.apk`; de getekende onder `releases/android/`. Initialisatie maakt **jouw eigen** lokale sleutel. Daarmee kun je de officiële APK niet als update vervangen. Bewaar eigen sleutels buiten Git. De scripts downloaden bouwafhankelijkheden; de voor 0.2.0 gebruikte versies staan in [de bouwregistratie](docs/android-build-dependencies.json). Het setupscript kiest de nieuwste Java 21-release en kan bij een latere uitvoering andere bouwtools ophalen; een identieke binaire rebuild is niet gegarandeerd.
 
-Voor laptop 0.3.1 zijn 69 Python-tests geslaagd. Voor de ongewijzigde Android-app 0.3.0 waren 26 kerncontroles geslaagd; de ondertekende APK en goedkeuringsflow zijn in een Android 11-emulator getest. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python-tests uit. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
+Voor laptop 0.3.2 zijn 74 Python-tests geslaagd. Voor de ongewijzigde Android-app 0.3.0 waren 26 kerncontroles geslaagd; de ondertekende APK en goedkeuringsflow zijn in een Android 11-emulator getest. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python-tests uit. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
 
 ## Veiligheid, gegevens en bijdragen
 

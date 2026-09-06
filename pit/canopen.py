@@ -149,6 +149,8 @@ class M5Link:
 
     def open(self):
         import serial
+        # Optional features belong to this connection, not a previous firmware.
+        self.capture_supported = True
         try:
             self.ser = serial.Serial(self.port, self.baud, timeout=0.05, write_timeout=1)
             time.sleep(1.5)

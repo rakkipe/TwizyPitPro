@@ -10,6 +10,33 @@ De app opent geen COM-poort bij het starten en doet geen automatische poortprobe
 
 ## M5StickC Plus2 + CAN Unit U085
 
+### Eén bridge voor verschillende Twizy-versies
+
+PitBridge 1 draagt CANopen-leesaanvragen over zonder een Twizy-model of
+controllerfirmware in de M5 vast te leggen. De app leest model en firmware bij
+elke voertuigverbinding opnieuw uit. Wisselen tussen Twizy 45/80 of een andere
+Twizy-firmware vereist daarom geen modelspecifieke M5-flash, zolang hetzelfde
+CANopen-protocol wordt ondersteund.
+
+Onbekende firmware verhindert de beschikbare basisuitlezing niet. Ontbrekende
+registers blijven als fout zichtbaar; de app veronderstelt geen vervangende
+waarden of schrijfcompatibiliteit. Een exacte registerinventaris en toekomstige
+schrijfondersteuning vereisen afzonderlijk gekwalificeerde schema's.
+
+Laptop 0.3.2 test dit met twaalf gesimuleerde model-/versiecombinaties: 45 en 80,
+elk met 0712.0001, 0712.0002, 0712.0003 en drie onbekende versieaanduidingen.
+Dit is geen bewijs dat alle bestaande of toekomstige voertuigfirmware fysiek
+werkt. De huidige firmware ondersteunt alleen lezen; een toekomstige uitbreiding
+met schrijven kan een eenmalige M5-update vereisen.
+
+Een reguliere app-update hoeft geen M5-update te vragen zolang PitBridge 1
+compatibel blijft. Oudere PitBridge 1 zonder CAPTURE blijft voor SDO-uitlezing
+bruikbaar. Bij opnieuw verbinden worden optionele meetfuncties opnieuw ontdekt.
+Willekeurige andere M5-firmware, zoals een PowerBox, spreekt mogelijk een ander
+protocol en wordt niet automatisch als PitBridge behandeld.
+
+### Aansluiten
+
 Controleer het opschrift: onderstaande pinnen zijn voor **CAN Unit U085** met
 CA-IS3050G. Dit is een transceiver voor de ESP32-TWAI-controller; geen MCP2515 SPI-board.
 

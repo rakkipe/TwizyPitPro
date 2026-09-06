@@ -179,7 +179,7 @@ class PitService:
     def connect(self, mode, port=None, adapter="elm", model="80", software="0712.0002"):
         if mode not in ("demo", "live"):
             raise ValueError("Ongeldige verbindingsmodus.")
-        if model not in ("45", "80") or software not in ("0712.0001", "0712.0002", "0712.0003", "9999.9999"):
+        if mode == "demo" and (model not in ("45", "80") or software not in ("0712.0001", "0712.0002", "0712.0003", "9999.9999")):
             raise ValueError("Onbekend demoscenario.")
         with self.lock:
             if self.session or self.pending or self.busy:
