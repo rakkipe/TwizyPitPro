@@ -145,7 +145,7 @@ class ElmLink:
             if "OK" not in self.command("ATCRA581").upper():
                 raise BusError("SDO-filter herstellen mislukt.")
 
-    def write_guard(self, preop=False):
+    def write_guard(self, preop=False, access_only=False):
         """Conservative write gate. No missing fields or stale frames accepted."""
         client = SDO(self)
         if client.number(0x1001, 0, 1) != 0:
@@ -167,7 +167,7 @@ class ElmLink:
                 raise BusError("Ongeldig of verouderd veiligheidsframe.")
             safe = (can_id == 0x597 and not raw[0]&0x20 and raw[1]&0x70 == 0x10
                     or can_id == 0x599 and raw[6:8] == b"\0\0"
-                    or can_id == 0x59b and raw[0] == 0 and raw[1]&9 == 1 and raw[3] == 0)
+                    or can_id == 0x59b and raw[0] in (0, 0x20) and not raw[1]&8 and (access_only or raw[1]&1) and raw[3] == 0)
             if not safe:
                 raise BusError(f"Onveilige voertuigstatus in CAN {can_id:03X}; N, rem, GO uit, stilstand en gas los vereist.")
             latest[can_id] = at
@@ -175,7 +175,7 @@ class ElmLink:
         if any(counts.get(can_id, 0) < 2 for can_id in (0x597, 0x599, 0x59b)):
             raise BusError("Te weinig verse veiligheidsframes; schrijven geblokkeerd.")
         return dict(aux=voltage, frame_ages={f"{i:03X}":current-at for i,at in latest.items()},
-                    checked_at=current, preop=preop)
+                    checked_at=current, preop=preop, access_only=access_only)
 
     def capture(self):
         """Bounded, filtered listen-only capture; restore SDO receive filter."""

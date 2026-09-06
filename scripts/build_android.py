@@ -47,10 +47,10 @@ def main():
         for dex in (BUILD/'dex').glob('*.dex'):archive.write(dex,dex.name)
     aligned=BUILD/'aligned.apk';run([bt/'zipalign.exe','-f','4',unsigned,aligned])
     if args.unsigned:return
-    signing=ROOT/'android-signing';keystore=signing/'owner-release.p12'
+    signing=pathlib.Path(os.environ.get('PIT_ANDROID_SIGNING', str(ROOT/'android-signing')));keystore=signing/'owner-release.p12'
     if not keystore.exists():raise RuntimeError('Run Initialize-AndroidSigning.ps1 before signing.')
     if 'PIT_SIGNING_PASSWORD' not in os.environ:raise RuntimeError('Signing password must be supplied in environment by the owner wrapper.')
-    out=DIST/('TwizyPitPro-QA-DO-NOT-DISTRIBUTE.apk' if args.qa else 'TwizyPitPro-0.3.0.apk')
+    out=DIST/('TwizyPitPro-QA-DO-NOT-DISTRIBUTE.apk' if args.qa else 'TwizyPitPro-0.3.1.apk')
     run([jdk/'bin/java.exe','-jar',bt/'lib/apksigner.jar','sign','--ks',keystore,'--ks-key-alias','twizypit-owner','--ks-pass','env:PIT_SIGNING_PASSWORD','--key-pass','env:PIT_SIGNING_PASSWORD','--v4-signing-enabled','false','--out',out,aligned])
     check=subprocess.check_output([str(jdk/'bin/java.exe'),'-jar',str(bt/'lib/apksigner.jar'),'verify','--verbose','--print-certs',str(out)],text=True)
     (DIST/(out.stem+'-signature.txt')).write_text(check,encoding='utf-8')

@@ -93,7 +93,7 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/sessions":
                     return self.respond(service.sessions())
                 if path == "/api/download/android":
-                    apk = ROOT / "releases" / "android" / "TwizyPitPro-0.3.0.apk"
+                    apk = ROOT / "releases" / "android" / "TwizyPitPro-0.3.1.apk"
                     if not apk.is_file():
                         return self.respond({"error": "Android-APK nog niet beschikbaar."}, 404)
                     return self.respond(apk.read_bytes(), content_type="application/vnd.android.package-archive", attachment=apk.name)
@@ -116,15 +116,30 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, OSError) as exc:
             self.respond({"error": str(exc)}, 400)
 
+    def reject_post(self, message, status):
+        # Consume only a bounded body on rejected requests. Closing a Windows
+        # socket with unread POST bytes can otherwise reset the 403 response.
+        previous = self.connection.gettimeout()
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if 0 < length <= 200000:
+                self.connection.settimeout(1)
+                self.rfile.read(length)
+        except (ValueError, OSError):
+            pass
+        finally:
+            self.connection.settimeout(previous)
+        return self.respond({"error": message}, status)
+
     def do_POST(self):
         if not self.check_host() or not self.local:
-            return self.respond({"error": "Bediening is alleen toegestaan vanaf deze laptop."}, 403)
+            return self.reject_post("Bediening is alleen toegestaan vanaf deze laptop.", 403)
         host = self.headers.get("Host", "")
         origin = self.headers.get("Origin", "")
         if origin != f"http://{host}" or not secrets.compare_digest(self.headers.get("X-Pit-CSRF", ""), self.server.csrf):
-            return self.respond({"error": "Ongeldige sessie of herkomst."}, 403)
+            return self.reject_post("Ongeldige sessie of herkomst.", 403)
         if self.headers.get_content_type() != "application/json":
-            return self.respond({"error": "JSON vereist."}, 415)
+            return self.reject_post("JSON vereist.", 415)
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 < length <= 200000:
@@ -144,6 +159,8 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/profile": lambda: service.save_profile(body.get("name"), body.get("values")),
                 "/api/record": lambda: service.recording(**body),
                 "/api/vehicle/prepare": lambda: service.vehicle_action("prepare", **body),
+                "/api/vehicle/snapshot": lambda: service.vehicle_action("snapshot", **body),
+                "/api/vehicle/close-access": lambda: service.vehicle_action("close-access", **body),
                 "/api/vehicle/apply": lambda: service.vehicle_action("apply", **body),
                 "/api/vehicle/restore": lambda: service.vehicle_action("restore", **body),
                 "/api/vehicle/restore-plan": lambda: service.vehicle_action("restore-plan", **body),

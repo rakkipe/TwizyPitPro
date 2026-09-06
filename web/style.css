@@ -14,3 +14,5 @@
 [hidden]{display:none!important}
 .vehicle-write-panel>label{display:block;margin:12px 0;line-height:1.5;color:var(--muted)}
 .vehicle-write-panel input[type=checkbox]{width:auto;margin-right:8px;accent-color:#beff50}
+
+.write-selection{margin:18px 0;padding:16px;border:1px solid var(--line);border-radius:12px}.write-selection summary{cursor:pointer;font-weight:600}#write-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:16px}#write-fields label{font-size:12px;line-height:1.5}#write-fields span{color:var(--muted)}#vehicle-last-result:not(:empty){padding:12px;border-left:3px solid #789d34;background:rgba(120,157,52,.08)}

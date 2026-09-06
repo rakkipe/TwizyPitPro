@@ -21,9 +21,9 @@ final class CanTelemetry {
             switch(e.getKey()){
                 case 0x155:if(b[3]==0x54){int soc=b[4]*256+b[5],current=(b[1]&15)*256+b[2];if(soc>0&&soc<=40000)Model.put(o,"soc",(soc>>2)/100.0);if(current>0&&current<0xf00)Model.put(o,"current",(2000-current)/4.0);}break;
                 case 0x599:int speed=b[6]*256+b[7];if(speed!=65535)Model.put(o,"speed",speed/100.0);break;
-                case 0x55f:if(b[5]!=255){int v1=(b[5]<<4)|(b[6]>>4),v2=((b[6]&15)<<8)|b[7];if(v1>0&&v1<4095&&v2>0&&v2<4095)Model.put(o,"voltage",((v1+v2+1)>>1)/64.0);}break;
+                case 0x55f:if(b[5]!=255){int v1=(b[5]<<4)|(b[6]>>4),v2=((b[6]&15)<<8)|b[7];if(v1>0&&v1<4095&&v2>0&&v2<4095)Model.put(o,"voltage",((v1+v2+1)>>1)/10.0);}break;
                 case 0x597:Model.put(o,"key_on",(b[1]&16)!=0);Model.put(o,"charging",(b[1]&32)!=0);Model.put(o,"transition",(b[1]&64)!=0);break;
-                case 0x59b:Model.put(o,"gear",b[0]==0?"N":b[0]==0x80?"D":b[0]==8?"R":"unknown");Model.put(o,"go",(b[1]&8)!=0);Model.put(o,"footbrake",(b[1]&1)!=0);Model.put(o,"throttle_raw",b[3]);break;
+                case 0x59b:Model.put(o,"gear",(b[0]==0||b[0]==0x20)?"N":b[0]==0x80?"D":b[0]==8?"R":"unknown");Model.put(o,"go",(b[1]&8)!=0);Model.put(o,"footbrake",(b[1]&1)!=0);Model.put(o,"throttle_raw",b[3]);break;
                 case 0x554:int hottest=-1000;for(int v:b)if(v>0&&v<240)hottest=Math.max(hottest,v-40);if(hottest>-1000)Model.put(o,"battery_temp",hottest);break;
                 default:break;
             }

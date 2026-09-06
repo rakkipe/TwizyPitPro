@@ -31,6 +31,7 @@ class BenchElm(ElmLink):
         self.bad_readback = None
         self.fail_after_writes = None
         self.journal = None
+        self.protected_reads = False
 
     def command(self, command, timeout=1.5):
         self.sent.append(command)
@@ -51,7 +52,8 @@ class BenchElm(ElmLink):
         if data[0] in (0x23, 0x2b, 0x2f):
             width = {0x23: 4, 0x2b: 2, 0x2f: 1}[data[0]]
             if self.journal:
-                assert self.journal.exists(), "Write without durable intent"
+                journal = self.journal.parent / "pending-access.json" if key[0] == 0x5000 else self.journal
+                assert journal.exists(), "Write without durable intent"
             value = data[4:4+width]
             self.downloads.append((key, value))
             if key == (0x5000, 2):
@@ -66,6 +68,8 @@ class BenchElm(ElmLink):
                 self.bad_ack = None
                 return "NO DATA\r>"  # the value changed, but acknowledgement was lost
             return "581 60" + data[1:4].hex() + "00000000\r>"
+        if self.protected_reads and key in self.objects and key[0] not in (0x1001, 0x1008, 0x1009, 0x100a, 0x1018, 0x5000, 0x5110, 0x5310, 0x606c) and self.objects[0x5000, 1] != b"\x04":
+            return "581 80" + data[1:4].hex() + "00000008\r>"
         self.bridge.write(b"READ " + command.encode() + b"\n")
         reply = self.bridge.readline().decode().strip().removeprefix("RX ")
         if key == self.bad_readback and self.downloads and self.downloads[-1][0] == key:
@@ -114,12 +118,13 @@ class VehicleWriteTests(unittest.TestCase):
         self.writer.observe_contact_off([(0x597, bytes(8))])
         return self.writer.verify_cycle(self.control, self.writer.pending["id"])
 
-    def test_prepare_is_read_only_and_binds_all_75_original_values(self):
+    def test_prepare_opens_access_without_tuning_and_binds_all_75_original_values(self):
         plan = self.prepare()
         self.assertEqual(len(plan["rows"]), 75)
         self.assertEqual(len(plan["changes"]), 1)
         self.assertEqual(plan["changes"][0]["before"], 1000)
-        self.assertEqual(self.link.downloads, [])
+        self.assertEqual(len(self.link.downloads), 4)
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads))
         self.assertFalse(self.writer.path.exists())
 
     def test_full_profiles_use_typed_writes_commit_and_cycle_for_45_and_80(self):
@@ -180,31 +185,35 @@ class VehicleWriteTests(unittest.TestCase):
             self.link.objects[key] = old
         self.assertEqual(self.link.downloads, [])
 
-    def test_changed_baseline_rejects_without_login(self):
+    def test_changed_baseline_rejects_without_tuning(self):
         plan = self.prepare()
         self.link.objects[0x2920, 1] = (800).to_bytes(2, "little")
         with self.assertRaises(ValueError): self.apply(plan)
-        self.assertEqual(self.link.downloads, [])
+        self.assertEqual(len(self.link.downloads), 8)
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads))
         self.assertFalse(self.writer.path.exists())
 
     def test_changed_identity_rejects_before_login(self):
         plan = self.prepare()
         self.link.objects[0x1018, 4] = (456).to_bytes(4, "little")
         with self.assertRaises(ValueError): self.apply(plan)
-        self.assertEqual(self.link.downloads, [])
+        self.assertEqual(len(self.link.downloads), 4)
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads))
 
     def test_approval_hash_is_required_and_consumed_once(self):
         plan = self.prepare()
         with self.assertRaises(ValueError):
             self.writer.apply(self.control, plan["id"], "wrong-hash")
         with self.assertRaises(ValueError): self.apply(plan)
-        self.assertEqual(self.link.downloads, [])
+        self.assertEqual(len(self.link.downloads), 4)
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads))
 
     def test_expired_plan_is_not_applied(self):
         plan = self.prepare()
         self.writer.plan["deadline"] = self.writer.clock()-1
         with self.assertRaises(ValueError): self.apply(plan)
-        self.assertEqual(self.link.downloads, [])
+        self.assertEqual(len(self.link.downloads), 4)
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads))
 
     def test_client_cannot_mutate_the_frozen_plan(self):
         plan = self.prepare()
@@ -237,7 +246,7 @@ class VehicleWriteTests(unittest.TestCase):
 
     def test_mid_transaction_safety_change_stops_next_write(self):
         plan = self.prepare({**self.values, "neutral": 20})
-        self.link.fail_after_writes = 3  # login writes + first tuning register
+        self.link.fail_after_writes = len(self.link.downloads) + 3  # new login plus one tuning register
         with self.assertRaises(BusError): self.apply(plan)
         tuning = [x for x in self.link.downloads if x[0][0] != 0x5000]
         self.assertEqual(len(tuning), 1)
@@ -272,7 +281,7 @@ class VehicleWriteTests(unittest.TestCase):
         self.link.objects[0x2920, 1] = (300).to_bytes(2, "little")
         before = len(self.link.downloads)
         with self.assertRaises(ValueError): self.writer.restore(self.control, plan["id"])
-        self.assertEqual(len(self.link.downloads), before)
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads[before:]))
 
     def test_expired_guard_prevents_protocol_transmission(self):
         before = list(self.link.sent)
@@ -287,16 +296,19 @@ class VehicleWriteTests(unittest.TestCase):
         plan = self.prepare()
         with patch("pit.vehicle_write.save_json", side_effect=OSError("disk full")):
             with self.assertRaises(OSError): self.apply(plan)
-        self.assertEqual(self.link.downloads, [])
+        self.assertEqual(len(self.link.downloads), 4)
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads))
 
     def test_service_routes_and_contact_off_monitor_work_together(self):
         service = PitService(self.temp.name)
         service.mode = "live"
         service.link = self.link
         service.identity = self.control.identity()
-        plan = service.vehicle_action("prepare", values=self.values, stock_drivetrain=True, faults_resolved=True)
+        with patch("pit.service.read_cluster", return_value={"entries": []}):
+            plan = service.vehicle_action("prepare", values=self.values, stock_drivetrain=True, faults_resolved=True)
         self.assertFalse(service.busy)
-        result = service.vehicle_action("apply", plan_id=plan["id"], review_hash=plan["review_hash"])
+        with patch("pit.service.read_cluster", return_value={"entries": []}):
+            result = service.vehicle_action("apply", plan_id=plan["id"], review_hash=plan["review_hash"])
         self.assertEqual(result["phase"], "awaiting-contact-cycle")
         with patch.object(self.link, "safety_capture", return_value=[(0x597, bytes(8), time.monotonic())]):
             service.live_sample()

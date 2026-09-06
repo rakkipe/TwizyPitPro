@@ -1,3 +1,5 @@
+> Android 0.3.1 corrigeert accuspanning en N-weergave; zelfstandige tuningwrites zijn nog niet aanwezig. De laptop-schrijfroute staat beschreven in [0.4.1](STATUS-0.4.1.md).
+
 # Twizy Pit Pro voor Android — 0.3.0
 
 Een native Android-app, met eigen Java-schermen, offline simulator, versleutelde
@@ -7,7 +9,7 @@ de Nothing/CMF-telefoon en de voertuigadapters zijn nog niet fysiek getest.
 
 ## Installeren
 
-1. Download `TwizyPitPro-0.3.0.apk` bij de [officiële release](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.3.0)
+1. Download `TwizyPitPro-0.3.1.apk` bij de [officiële release](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.4.1-preview)
    en kopieer hem naar je telefoon, bijvoorbeeld via USB.
 2. Open de APK in Bestanden. Geef die bestandsapp desgevraagd toestemming om
    apps uit deze bron te installeren en kies Installeren.

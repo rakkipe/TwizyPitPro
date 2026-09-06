@@ -1,3 +1,5 @@
+> Update 0.4.1-preview: 123 Python-tests en 26 Android-kerncontroles geslaagd. Zie [actuele status](STATUS-0.4.1.md). Onderstaande eerdere testregistraties blijven historisch.
+
 # Validatie — 6 september 2026
 
 ## Laptop 0.4.0

@@ -75,13 +75,13 @@ class HttpTests(unittest.TestCase):
         status,_=self.request("POST","/api/write",{"index":0x2920,"value":1000},self.headers())
         self.assertEqual(status,404)
     def test_vehicle_mutations_rejected_from_demo(self):
-        for action in ("prepare", "apply", "restore-plan", "restore", "verify-cycle"):
+        for action in ("snapshot", "close-access", "prepare", "apply", "restore-plan", "restore", "verify-cycle"):
             with self.subTest(action=action):
                 status,data=self.request("POST","/api/vehicle/"+action,{},self.headers())
                 self.assertEqual(status,400,data)
                 self.assertIn("vLinker",json.loads(data)["error"])
     def test_vehicle_routes_stay_local_and_require_csrf(self):
-        for action in ("prepare", "apply", "restore-plan", "restore", "verify-cycle"):
+        for action in ("snapshot", "close-access", "prepare", "apply", "restore-plan", "restore", "verify-cycle"):
             with self.subTest(action=action):
                 headers=self.headers();headers.pop("X-Pit-CSRF")
                 self.assertEqual(self.request("POST","/api/vehicle/"+action,{},headers)[0],403)

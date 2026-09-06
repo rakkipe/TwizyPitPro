@@ -93,7 +93,7 @@ class PassiveTelemetryTests(unittest.TestCase):
     def test_speed_soc_current_and_pack_power(self):
         frames=[(0x155,bytes.fromhex("0006405480C80000")), # 40000? SOC 32968/400=82.42; 100 A
                 (0x599,bytes.fromhex("0000000000001388")),
-                (0x55f,bytes.fromhex("0000000000D80D80"))]
+                (0x55f,bytes.fromhex("000000000021C21C"))]
         s=decode_frames(frames)
         self.assertEqual(s["speed"],50)
         self.assertEqual(s["soc"],82.42)

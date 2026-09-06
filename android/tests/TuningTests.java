@@ -20,7 +20,7 @@ public final class TuningTests {
             for(int n=0;n<vectors.length();n++){JSONObject v=vectors.optJSONObject(n);JSONArray actual=Tuning.targets(model,v.optJSONObject("values"),v.optString("model"),v.optLong("flags")),expected=v.optJSONArray("expected");check(actual.length()==expected.length());for(int i=0;i<actual.length();i++){JSONObject a=actual.optJSONObject(i),e=expected.optJSONObject(i);for(String key:new String[]{"address","width","signed","raw"})if(!a.opt(key).toString().equals(e.opt(key).toString()))throw new AssertionError(n+" "+a.optString("address")+" "+key);}}
         });
         CoreTests.test("CAN telemetry from protocol bytes",()->{
-            JSONObject s=CanTelemetry.decode(CanTelemetry.parse("155 0006405480C80000\r599 0000000000001388\r55F 0000000000D80D80\r"));check(s.optDouble("speed")==50);check(s.optDouble("soc")==82.42);check(s.optDouble("current")==100);check(s.optDouble("voltage")==54);check(s.optDouble("power")==5.4);
+            JSONObject s=CanTelemetry.decode(CanTelemetry.parse("155 0006405480C80000\r599 0000000000001388\r55F 000000000021C21C\r"));check(s.optDouble("speed")==50);check(s.optDouble("soc")==82.42);check(s.optDouble("current")==100);check(s.optDouble("voltage")==54);check(s.optDouble("power")==5.4);
         });
         CoreTests.test("invalid latest frame cannot leave stale speed",()->{
             JSONObject s=CanTelemetry.decode(CanTelemetry.parse("599 0000000000001388\n599 000000000000FFFF\n155 0006409480C80000\n"));check(!s.has("speed")&&!s.has("soc"));

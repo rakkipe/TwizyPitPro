@@ -19,11 +19,12 @@ def decode_frames(frames):
             if speed!=65535:out["speed"]=speed/100
         elif can_id==0x55f and b[5]!=255:
             v1=(b[5]<<4)|(b[6]>>4);v2=((b[6]&15)<<8)|b[7]
-            if v1 not in (0,4095) and v2 not in (0,4095):out["voltage"]=((v1+v2+1)>>1)/64
+            # OVMS rt_battmon.cpp BatteryUpdateMetrics: pack units are 0.1 V.
+            if v1 not in (0,4095) and v2 not in (0,4095):out["voltage"]=((v1+v2+1)>>1)/10
         elif can_id==0x597:
             out.update(key_on=bool(b[1]&16),charging=bool(b[1]&32),transition=bool(b[1]&64))
         elif can_id==0x59b:
-            out.update(gear={0:"N",0x80:"D",8:"R"}.get(b[0],"unknown"),go=bool(b[1]&8),footbrake=bool(b[1]&1),throttle_raw=b[3])
+            out.update(gear={0:"N",0x20:"N",0x80:"D",8:"R"}.get(b[0],"unknown"),gear_raw=b[0],go=bool(b[1]&8),footbrake=bool(b[1]&1),throttle_raw=b[3])
         elif can_id==0x554:
             temps=[v-40 for v in b if 0<v<240]
             if temps:out["battery_temp"]=max(temps)

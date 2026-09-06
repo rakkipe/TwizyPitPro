@@ -1,3 +1,5 @@
+> Historische beschrijving van 0.4.0. Gebruik [0.4.1](STATUS-0.4.1.md) voor de actuele toegangssessie en schrijfprocedure.
+
 # Laptop 0.4.0 — vLinker-schrijfprocedure
 
 De laptop heeft nu uitvoerende schrijfcode. **Alleen offline gevalideerd; geen

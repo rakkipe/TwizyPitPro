@@ -1,11 +1,8 @@
 # Beveiliging
 
-Laptop 0.4.0 heeft een gecontroleerde vLinker-schrijfroute, alleen offline getest.
-De oorspronkelijke instellingen worden opgeslagen vóór login of schrijven. Elk
-plan is kort geldig, eenmalig en gebonden aan een exacte controller en beginsnapshot.
-Bij fouten stopt de procedure zonder automatische rollback of reset. M5 en de
-Android-app 0.3.0 blijven alleen uitlezen. Foutwissen en ECU-flashen ontbreken.
-Er is geen onafhankelijke beveiligingsaudit uitgevoerd.
+Laptop 0.4.1-preview gebruikt een gecontroleerde vLinker-schrijfroute. Een aparte toegangssessie wordt naar schijf geflusht vóór level-4-login. Een volledige beginsnapshot en tuningbackup worden bewaard vóór configuratiemodus of tuningwijzigingen. Elk plan is kort geldig, eenmalig en gebonden aan de controller en beginwaarden. Niet-geselecteerde registers blijven behouden.
+
+Bij onbekende schrijfuitkomst stopt de procedure zonder automatische rollback of reset. Actieve Renault-clustermeldingen blokkeren nieuwe tuning. Android 0.3.1 en M5 blijven alleen uitlezen. Foutwissen en ECU-flashen ontbreken in de GUI. Er is geen onafhankelijke beveiligingsaudit of volledige fysieke tuningvalidatie uitgevoerd.
 
 ## Een probleem melden
 

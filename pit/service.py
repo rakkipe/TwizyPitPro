@@ -14,6 +14,7 @@ from .canopen import BusError, ElmLink, M5Link, SDO
 from .tuning import register_inventory, compare_snapshot, targets
 from .telemetry import decode_frames
 from .vehicle_write import VehicleWriter, VLinkerControl
+from .renault import read_cluster
 
 
 def now():
@@ -267,7 +268,7 @@ class PitService:
                 self.event("Verbinding gesloten", "Geen busverbinding actief.")
 
     def vehicle_action(self, action, **body):
-        if action not in ("prepare", "apply", "restore-plan", "restore", "verify-cycle"):
+        if action not in ("snapshot", "close-access", "prepare", "apply", "restore-plan", "restore", "verify-cycle"):
             raise ValueError("Onbekende voertuigactie.")
         with self.lock:
             if self.mode != "live" or not self.connected or not isinstance(self.link, ElmLink):
@@ -278,7 +279,19 @@ class PitService:
         try:
             with self.bus_lock:
                 control = VLinkerControl(self.link)
-                if action == "prepare":
+                if action in ("prepare", "apply"):
+                    cluster = read_cluster(self.link)
+                    active = [f"{entry['ecu']}/{entry['code']}" for entry in cluster["entries"] if entry["present"]]
+                    if active:
+                        raise BusError("Actieve Renault-storing: " + ", ".join(active) + ". Eerst de oorzaak oplossen; tuningplan geblokkeerd.")
+                if action == "snapshot":
+                    result = self.vehicle_writer.snapshot(control)
+                    self.scan = dict(at=now(), mode="live", identity=result["identity"], registers=result["registers"],
+                                     complete=True, scope="75 SEVCON-instellingen via level 4 gelezen; toegang weer gesloten. Geen tuning gewijzigd.",
+                                     observations=[dict(name="Beschermde instellingen", status="ok", text="75/75 getypeerd uitgelezen en opgeslagen. Uitloggen bevestigd.")])
+                elif action == "close-access":
+                    result = self.vehicle_writer.close_access(control)
+                elif action == "prepare":
                     result = self.vehicle_writer.prepare(control, **body)
                 elif action == "apply":
                     result = self.vehicle_writer.apply(control, **body)
@@ -288,7 +301,7 @@ class PitService:
                     result = self.vehicle_writer.review_restore(control, **body)
                 else:
                     result = self.vehicle_writer.verify_cycle(control, **body)
-            self.event("Voertuigactie: " + action, "Voorbereid schrijfplan." if action in ("prepare", "restore-plan") else result["phase"])
+            self.event("Voertuigactie: " + action, "75 instellingen gelezen; uitgelogd." if action == "snapshot" else "Voorbereid schrijfplan." if action in ("prepare", "restore-plan") else result["phase"])
             return result
         except Exception as exc:
             self.event("Voertuigactie gestopt", str(exc), "error")
@@ -296,7 +309,7 @@ class PitService:
         finally:
             with self.lock:
                 self.busy = False
-                if action not in ("prepare", "restore-plan"):
+                if action not in ("snapshot", "prepare", "restore-plan"):
                     self.scan = self.plan = None
                     self.revision += 1
 
@@ -320,11 +333,12 @@ class PitService:
                     self.identity["source"] = "live"
                     report["identity"] = self.identity.copy()
                     if self.identity.get("errors"): report["complete"]=False
-                    for index, sub, width, title in ((0x1001, 0, 1, "CANopen error register"), (0x6041, 0, 2, "Statusword"), (0x1003, 0, 1, "Aantal opgeslagen fouten")):
+                    fault_counter = (0x5300, 1, 2, "Actieve SEVCON-meldingen") if compatibility(self.identity)["known"] else (0x1003, 0, 1, "Aantal opgeslagen fouten")
+                    for index, sub, width, title in ((0x1001, 0, 1, "CANopen error register"), (0x6041, 0, 2, "Statusword"), fault_counter):
                         try:
                             value = client.number(index, sub, width)
                             report["registers"].append(dict(address=f"{index:04X}:{sub:02X}", raw=value, width=width, key=title))
-                            report["observations"].append(dict(name=title, status="attention" if value and index in (0x1001, 0x1003) else "info", text=f"0x{value:X} ({value})"))
+                            report["observations"].append(dict(name=title, status="attention" if value and index in (0x1001, 0x1003, 0x5300) else "info", text=f"0x{value:X} ({value})"))
                             if index == 0x1003:
                                 for entry in range(1, min(value, 16)+1):
                                     fault = client.number(index, entry)
@@ -333,7 +347,15 @@ class PitService:
                             report["complete"] = False
                             report["observations"].append(dict(name=title, status="unknown", text=str(exc)))
                     comp = compatibility(self.identity)
+                    level = None
                     if comp["known"]:
+                        try:
+                            level = client.number(0x5000, 1, 1)
+                        except BusError as exc:
+                            report["observations"].append(dict(name="Toegangsniveau", status="unknown", text=str(exc)))
+                    if comp["known"] and level != 4:
+                        report["observations"].append(dict(name="Beschermde instellingen", status="info", text="Gebruik '75 instellingen uitlezen' in Tuning voor tijdelijke level-4-toegang."))
+                    if comp["known"] and level == 4:
                         for row in register_inventory(comp["model"]):
                             row = dict(row)
                             try:
@@ -345,6 +367,21 @@ class PitService:
                                 report["complete"] = False
                             report["registers"].append(row)
                     report["scope"] = "SEVCON CANopen en beschikbare SDO's. Geen volledige Renault ECU/airbag/BMS-DTC-scan. Fouthistorie is niet automatisch een actuele storing."
+                    if isinstance(self.link, ElmLink):
+                        try:
+                            cluster = read_cluster(self.link)
+                            report["renault_cluster"] = cluster
+                            names = {1: "Instrumentenpaneel", 2: "Lader / BCB", 3: "Batterijcomputer", 4: "SEVCON"}
+                            for entry in cluster["entries"]:
+                                report["observations"].append(dict(name=f"Renault {entry['ecu']}/{entry['code']} · {names.get(entry['ecu'], 'ECU')}",
+                                    status="attention" if entry["present"] else "info",
+                                    text="Actief gemeld; exacte oorzaak vereist verdere diagnose." if entry["present"] else "Opgeslagen in de historie."))
+                            if not cluster["entries"]:
+                                report["observations"].append(dict(name="Renault-foutgeheugen", status="ok", text="Eerste 10 foutslots leeg."))
+                            report["scope"] += " Eerste 10 Renault-foutslots gelezen; geen volledige DF-codevertaling."
+                        except BusError as exc:
+                            report["complete"] = False
+                            report["observations"].append(dict(name="Renault-foutgeheugen", status="unknown", text=str(exc)))
                     report["inventory_count"]=len(register_inventory(comp["model"])) if comp["known"] else 0
                     report["fingerprint"]=fingerprint(self.identity)
                     report["power_map_commit"]={"address":"4641:01","access":"write-only","readback":False}
@@ -571,6 +608,7 @@ class PitService:
                         pending=self.pending, session={k:v for k,v in self.session.items() if k != "last_lap"} if self.session else None,
                         fault_scenario=self.fault_scenario, revision=self.revision, scan=self.scan,
                         vehicle_transaction=self.vehicle_writer.status(),
+                        vehicle_access=self.vehicle_writer.access_status(),
                         parameters=parameters(compatibility(self.identity)["model"] or "80"),
                         limits=dict(live_write=write_available, write_route="vlinker-guarded", hardware_tested=False, firmware_flash=False, full_ecu_diagnostics=False))
 
