@@ -91,6 +91,9 @@ ondertekend. Een nieuwe Windows-installatie kan de DPAPI-kopie onbruikbaar maken
 
 ## Laptopbeveiliging
 
+Laptop 0.4.0 voegt een afzonderlijke vLinker-schrijfprocedure toe; zie
+[STATUS-0.4.md](STATUS-0.4.md). Dit verandert de Android-APK niet.
+
 Vanaf laptopversie 0.3.1 is er geen appwachtwoord of wachtwoordvraag per actie.
 Bediening is alleen toegestaan via een lokale verbinding met geldige Host,
 dezelfde Origin en een sessiegebonden CSRF-token. Wie toegang heeft tot je
@@ -106,7 +109,7 @@ versleuteld. De native app weigert publieke adressen, redirects en URL-inloggege
 
 ## Grenzen
 
-**Live voertuigtuning en firmwareflash ontbreken.** Er bestaat geen USB-/CAN-
+**In deze Android-app ontbreken live voertuigtuning en firmwareflash.** Er bestaat geen USB-/CAN-
 schrijfroute die met een verborgen instelling kan worden vrijgegeven. De editor
 is geen bewijs dat een race-afstelling thermisch of mechanisch veilig is. De
 simulator voorspelt geen prestaties. Een echte voertuigkwalificatie vraagt een

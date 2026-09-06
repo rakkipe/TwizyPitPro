@@ -1,4 +1,4 @@
-"""Local HTTP application. Vehicle writes are deliberately absent."""
+"""Local HTTP application. Vehicle writes require a reviewed, guarded plan."""
 import argparse
 import ipaddress
 import json
@@ -143,6 +143,11 @@ class Handler(BaseHTTPRequestHandler):
                 "/api/cycle-demo": lambda: service.demo_cycle(body.get("restore", False)),
                 "/api/profile": lambda: service.save_profile(body.get("name"), body.get("values")),
                 "/api/record": lambda: service.recording(**body),
+                "/api/vehicle/prepare": lambda: service.vehicle_action("prepare", **body),
+                "/api/vehicle/apply": lambda: service.vehicle_action("apply", **body),
+                "/api/vehicle/restore": lambda: service.vehicle_action("restore", **body),
+                "/api/vehicle/restore-plan": lambda: service.vehicle_action("restore-plan", **body),
+                "/api/vehicle/verify-cycle": lambda: service.vehicle_action("verify-cycle", **body),
             }
             if self.path not in routes:
                 return self.respond({"error": "Deze actie bestaat niet."}, 404)
@@ -155,7 +160,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Twizy Pit Pro — standaard demo, geen voertuigschrijfacties")
+    parser = argparse.ArgumentParser(description="Twizy Pit Pro — standaard demo; vLinker-schrijfplan apart voorbereiden en bevestigen")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--lan", action="store_true", help="Telefoonviewer op lokaal netwerk; alle bediening blijft op laptop")
     parser.add_argument("--open", action="store_true")
@@ -166,7 +171,7 @@ def main():
         atomic_json(ROOT/"profiles"/f"T{item['model']}-{item['software']}.json", item)
     service.start_worker()
     print(f"Twizy Pit Pro {VERSION} — http://127.0.0.1:{args.port}", flush=True)
-    print("DEMO · live uitlezen na selectie · live schrijven niet beschikbaar", flush=True)
+    print("DEMO · live verbinden na selectie · schrijven uitsluitend via gecontroleerd vLinker-plan", flush=True)
     if args.open:
         webbrowser.open(f"http://127.0.0.1:{args.port}")
     try:

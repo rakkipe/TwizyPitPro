@@ -4,7 +4,9 @@
 
 Een pitstudio voor Renault Twizy: een native Android-app en een Windows/laptop-GUI met diagnose, telemetrie, profielontwerp en toestelgoedkeuring op Android.
 
-**Laptop 0.3.2 en Android 0.3.0 zijn previews voor demo en uitlezen. Live tuning, foutcodes wissen en firmware flashen zijn niet ingebouwd.** De 43 instelvelden bewerken een ontwerp; toepassen werkt alleen in de simulator. Er is nog geen test met een echte Twizy, telefoon of CAN-adapter uitgevoerd.
+**Laptop 0.4.0 bevat een uitvoerende vLinker-schrijfroute voor Twizy 45/80 met exact herkende 0712.0001/0712.0002. Deze is alleen offline getest, nog niet op een echte adapter of Twizy.** Voorbereiding leest 75 beginwaarden; een apart bevestigd plan voert level 4, configuratiemodus, getypeerde writes, read-back en kaartcommit uit. Een contactcyclus moet via CAN worden waargenomen en opnieuw gecontroleerd. Fouten stoppen de procedure met een hersteljournaal.
+
+**Android blijft 0.3.0 en M5 blijft alleen uitlezen. Foutcodes wissen en ECU-firmware flashen ontbreken.** Er is nog geen test op de fysieke telefoon of CAN-adapters uitgevoerd. Een SERV-melding is niet automatisch een laadklepfout; los gemelde storingen op vóór tuning.
 
 [Android APK downloaden](https://github.com/rakkipe/TwizyPitPro/releases/tag/v0.3.0) · [Android-handleiding](docs/ANDROID.md) · [Hardware](docs/HARDWARE.md) · [Validatie](docs/VALIDATIE.md)
 
@@ -13,12 +15,13 @@ Een pitstudio voor Renault Twizy: een native Android-app en een Windows/laptop-G
   <img src="docs/images/android-profiles.png" width="280" alt="Native Android profielbeheer">
 </p>
 
-Nieuw in 0.3: **75 registers voor alle 43 ontwerpvelden**, een volledige registervergelijking in beide GUI's en uitgebreidere CAN-uitlezing. [Wat werkt en wat nog ontbreekt](docs/STATUS-0.3.md).
+Nieuw in 0.3: **75 registers voor alle 43 ontwerpvelden**, een volledige registervergelijking in beide GUI's en uitgebreidere CAN-uitlezing. [Nieuwe vLinker-schrijfprocedure en beperkingen](docs/STATUS-0.4.md).
 
 ## Wat zit erin?
 
 - Een zelfstandige, native Android-app voor **Android 11 of nieuwer**; geen WebView en geen laptop nodig voor de demo.
-- Een donkere grafische pitstudio met dashboard, diagnose, zoeken en 43 ontwerpvelden, vergelijking, snapshots en gesimuleerd herstel.
+- Een donkere grafische pitstudio met dashboard, diagnose, 43 ontwerpvelden, registervergelijking en versiegebonden profielen.
+- Laptop: een afzonderlijke vLinker-schrijfprocedure met beginsnapshot, bevestiging, read-back en expliciet herstel.
 - Vier referentieschema's: **Twizy 45/80 × SEVCON 0712.0001/0712.0002**. Identiteit en revisie moeten passen; onbekende combinaties en 0712.0003+ blokkeren demo-toepassing.
 - Een CANopen-leespad voor **vLinker FS via USB** of **M5StickC Plus2 + CAN Unit U085** met de meegeleverde PitBridge-firmware. Uitlezing van controlleridentiteit, firmware en beschikbare diagnosewaarden. Adapterwerking is nog niet op fysieke hardware bevestigd.
 - Profielen, sessies, handmatige rondemarkeringen en CSV-/JSON-export. Android heeft optionele GPS-registratie zolang de app op de voorgrond staat.
@@ -70,7 +73,7 @@ De laptop gebruikt Python, standaardbibliotheek HTTP en `pyserial==3.5`. De Andr
 
 De ongetekende APK staat onder `android/build/aligned.apk`; de getekende onder `releases/android/`. Initialisatie maakt **jouw eigen** lokale sleutel. Daarmee kun je de officiële APK niet als update vervangen. Bewaar eigen sleutels buiten Git. De scripts downloaden bouwafhankelijkheden; de voor 0.2.0 gebruikte versies staan in [de bouwregistratie](docs/android-build-dependencies.json). Het setupscript kiest de nieuwste Java 21-release en kan bij een latere uitvoering andere bouwtools ophalen; een identieke binaire rebuild is niet gegarandeerd.
 
-Voor laptop 0.3.2 zijn 74 Python-tests geslaagd. Voor de ongewijzigde Android-app 0.3.0 waren 26 kerncontroles geslaagd; de ondertekende APK en goedkeuringsflow zijn in een Android 11-emulator getest. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python-tests uit. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
+Voor laptop 0.4.0 zijn 101 Python-tests geslaagd. Voor de ongewijzigde Android-app 0.3.0 waren 26 kerncontroles geslaagd; de ondertekende APK en goedkeuringsflow zijn in een Android 11-emulator getest. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python-tests uit. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
 
 ## Veiligheid, gegevens en bijdragen
 

@@ -94,6 +94,6 @@ aangepast. Gebruik geen port-forwarding. De link bevat de tijdelijke viewer-sleu
 
 In deze browserviewer kun je dashboard en rapporten lezen. Aansluiten, scannen en
 sessies bedienen van de laptop gebeurt op de laptop zelf. De native APK heeft
-zijn eigen demo en USB-leespad. Beide varianten hebben geen live tuningschrijfroute.
+zijn eigen demo en USB-leespad. Alleen laptop 0.4.0 heeft de afzonderlijke vLinker-schrijfroute; zie [de procedure](STATUS-0.4.md).
 De M5 heeft geen wifi-streaming in deze build. Een homescreen-snelkoppeling voor
 de viewer is geen vervanging voor de zelfstandige Android-APK.

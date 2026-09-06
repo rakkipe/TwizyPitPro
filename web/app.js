@@ -38,15 +38,15 @@ function render(){
   if(!state)return;
   const c=state.compatibility,s=state.sample, demo=state.mode==='demo', valid=state.connected && (s.age??0)<6;
   $('mode-pill').className='mode-pill'+(demo?'':state.connected?' live':' offline');
-  $('mode-pill').innerHTML=`<i class="dot"></i>${demo?'DEMOMODUS':state.connected?'LIVE · ALLEEN LEZEN':'NIET VERBONDEN'}`;
+  $('mode-pill').innerHTML=`<i class="dot"></i>${demo?'DEMOMODUS':state.connected?(state.busy&&state.vehicle_transaction?'SCHRIJFPROCEDURE':'LIVE VERBONDEN'):'NIET VERBONDEN'}`;
   $('clock').textContent=new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});
   $('vehicle-name').innerHTML=`TWIZY <em>${esc(c.model||'?')}</em>`;
   document.querySelector('.big-number').textContent=c.model||'?';
   $('firmware').textContent=c.software;
   $('active-profile').textContent=state.profile_name;
-  $('vehicle-status').textContent=demo?'DEMO GEREED':state.connected?'ALLEEN UITLEZEN':'OFFLINE';
+  $('vehicle-status').textContent=demo?'DEMO GEREED':state.connected?'CONTROLLER VERBONDEN':'OFFLINE';
   $('hero-connection').textContent=demo?' Simulator verbonden':state.connected?' Controller verbonden':' Geen verbinding';
-  $('footer-mode').textContent=demo?'Simulatie · geen voertuigdata':state.connected?'Live CANopen · alleen uitlezen':'Offline · data niet actueel';
+  $('footer-mode').textContent=demo?'Simulatie · geen voertuigdata':state.connected?'Live CANopen · vLinker-schrijfplan apart bevestigen':'Offline · data niet actueel';
   $('demo-run').disabled=!demo||!bootstrap.local||!!state.pending;
   $('demo-run').textContent=state.running?'Terug naar de pit ↙':'Start demoronde ↗';
   $('stint-title').textContent=state.running?'De demo is op het circuit.':'Van pitstraat naar circuit.';
@@ -56,7 +56,7 @@ function render(){
   if(state.pending)alerts.push(`Demo-transactie: ${esc(state.pending.phase)}. ${bootstrap.local?'<button class="button" id="pending-cycle">Demo-contactcyclus</button><button class="button" id="pending-restore">Demo herstellen</button>':''}`);
   if(demo && !['none','writefail'].includes(state.fault_scenario))alerts.push('Gesimuleerde storing actief: '+esc(state.fault_scenario)+'. Tuningtoepassing geblokkeerd.');
   if(state.connected && !valid)alerts.push('Telemetrie verouderd. Controleer de busverbinding.');
-  if(!demo&&state.connected)alerts.push('Live diagnose actief. Niet-uitgelezen waarden blijven onbekend. Deze release schrijft niet naar het voertuig.');
+  if(!demo&&state.connected)alerts.push('Live diagnose actief. Niet-uitgelezen waarden blijven onbekend. Een vLinker-schrijfplan bereid je apart voor in Tuning studio.');
   $('persistent-alert').hidden=!alerts.length;const alertContent=alerts.join('<br>');if($('persistent-alert').dataset.content!==alertContent){$('persistent-alert').innerHTML=alertContent;$('persistent-alert').dataset.content=alertContent;}
   if($('pending-cycle'))action('pending-cycle',async()=>{await api('/api/cycle-demo',{});await refresh();toast('Demo-contactcyclus afgerond.');});
   if($('pending-restore'))action('pending-restore',async()=>{await api('/api/cycle-demo',{restore:true});draft=null;await refresh();toast('Demo hersteld vanuit snapshot.');});
@@ -69,6 +69,7 @@ function render(){
   if(selectedPage==='dashboard')drawTelemetry();
   if(!draft||draftIdentity!==c.fingerprint){draft={...Object.fromEntries(state.parameters.map(p=>[p.key,p.default])),...state.current};draftIdentity=c.fingerprint;renderEditor();}
   if(selectedPage==='tuning')renderTuneSummary();
+  renderVehicleWriter();
   if(selectedPage==='diagnostics')renderDiagnostics();
   if(selectedPage==='sessions')renderLog();
   if(selectedPage==='hardware')renderHardware();
@@ -96,7 +97,7 @@ function renderDiagnostics(){const identity=state.identity,c=state.compatibility
 }
 function renderEditor(){const groups=[...new Set(state.parameters.map(p=>p.group))];$('group-filter').innerHTML='<option value="all">Alle instellingen</option>'+groups.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');$('parameter-groups').innerHTML=groups.map(g=>`<article class="panel parameter-group" data-group="${esc(g)}"><div class="group-heading"><h3>${esc(g)}</h3><span>${state.parameters.filter(p=>p.group===g).length} INSTELLINGEN</span></div>${state.parameters.filter(p=>p.group===g).map(p=>`<div class="parameter-row" data-key="${p.key}"><div class="parameter-header"><label for="num-${p.key}">${esc(p.name)}</label><div class="number-field"><input type="number" id="num-${p.key}" data-key="${p.key}" min="${p.min}" max="${p.max}" step="1" value="${draft[p.key]}" aria-label="${esc(p.name)}"><span>${esc(p.unit)}</span></div></div><p>${esc(p.note)}</p><div class="range-line"><span>${p.min}</span><input type="range" id="range-${p.key}" data-key="${p.key}" min="${p.min}" max="${p.max}" step="1" value="${draft[p.key]}" aria-label="${esc(p.name)} schuifregelaar"><span>${p.max}</span></div></div>`).join('')}</article>`).join('');
   $('parameter-groups').querySelectorAll('input').forEach(input=>input.addEventListener('input',()=>{const key=input.dataset.key;draft[key]=input.value===''?NaN:Number(input.value);const other=$(input.type==='range'?'num-'+key:'range-'+key);other.value=input.value;currentPlan=null;renderTuneSummary();}));filterParameters();renderTuneSummary();}
-function renderTuneSummary(){if(!draft)return;const changes=state.parameters.filter(p=>draft[p.key]!==state.current[p.key]);$('tune-summary').innerHTML=`<div class="change-count">${changes.length}<span>${state.mode==='demo'?'wijzigingen':'ontwerpvelden · beginsituatie onbekend'}</span></div>`+kv('Model',state.compatibility.label)+kv('Firmware',state.compatibility.software)+kv('Topsnelheid',format(draft.speed)+' km/u')+kv('Regeneratie gas los',format(draft.neutral)+' %');$('tuning-mode-note').textContent=state.mode==='demo'?'Bewerk de demo-instellingen. Vergelijk elke wijziging voordat je toepast.':'Ontwerp op modelreferenties. Werkelijke beginwaarden zijn niet als volledig profiel uitgelezen; live schrijven ontbreekt.';document.querySelectorAll('.parameter-row').forEach(row=>row.classList.toggle('changed',draft[row.dataset.key]!==state.current[row.dataset.key]));drawMap();}
+function renderTuneSummary(){if(!draft)return;const changes=state.parameters.filter(p=>draft[p.key]!==state.current[p.key]);$('tune-summary').innerHTML=`<div class="change-count">${changes.length}<span>${state.mode==='demo'?'wijzigingen':'ontwerpvelden · beginsituatie onbekend'}</span></div>`+kv('Model',state.compatibility.label)+kv('Firmware',state.compatibility.software)+kv('Topsnelheid',format(draft.speed)+' km/u')+kv('Regeneratie gas los',format(draft.neutral)+' %');$('tuning-mode-note').textContent=state.mode==='demo'?'Bewerk de demo-instellingen. Vergelijk elke wijziging voordat je toepast.':'Ontwerp op modelreferenties. Bereid hieronder een voertuigplan voor om echte beginwaarden te vergelijken.';document.querySelectorAll('.parameter-row').forEach(row=>row.classList.toggle('changed',draft[row.dataset.key]!==state.current[row.dataset.key]));drawMap();}
 function filterParameters(){const query=$('parameter-search').value.toLocaleLowerCase('nl'),group=$('group-filter').value;document.querySelectorAll('.parameter-group').forEach(section=>{let count=0;section.querySelectorAll('.parameter-row').forEach(row=>{const p=state.parameters.find(p=>p.key===row.dataset.key);const show=(group==='all'||p.group===group)&&(`${p.name} ${p.note} ${p.key}`.toLocaleLowerCase('nl').includes(query));row.hidden=!show;if(show)count++;});section.hidden=!count;});}
 $('parameter-search').addEventListener('input',filterParameters);$('group-filter').addEventListener('change',filterParameters);
 action('reset-editor',async()=>{draft={...Object.fromEntries(state.parameters.map(p=>[p.key,p.default])),...state.current};renderEditor();toast(state.mode==='demo'?'Editor terug op huidige demowaarden.':'Modelreferenties geladen; geen voertuigdefaults vastgesteld.');});
@@ -135,4 +136,32 @@ function renderLog(){$('event-list').innerHTML=state.events.map(e=>`<div class="
 
 async function init(){try{bootstrap=await api('/api/bootstrap');await refresh();setPage(location.hash.slice(1)||'dashboard');setInterval(refresh,1000);}catch(error){toast(error.message,true);$('persistent-alert').hidden=false;$('persistent-alert').textContent=error.message;}}
 const androidButton=document.createElement('button');androidButton.className='button small';androidButton.textContent='Android APK ↓';androidButton.onclick=()=>downloadAPI('/api/download/android','TwizyPitPro-0.3.0.apk').catch(e=>toast(e.message,true));$('phone-status').parentElement.appendChild(androidButton);
+const vehiclePanel=document.createElement('article');
+vehiclePanel.className='panel section-gap vehicle-write-panel';
+vehiclePanel.innerHTML=`<div class="eyebrow">VLINKER FS / VOERTUIG</div><h3>Schrijfplan voor jouw Twizy</h3><p class="muted">Bereid eerst een nieuwe uitlezing en registervergelijking voor. Schrijven start pas nadat je dat plan bevestigt. Deze route is offline getest; de eerste fysieke test staat nog open.</p><label><input type="checkbox" id="faults-resolved"> Gemelde voertuigstoringen (ook SERV) zijn opgelost</label><label><input type="checkbox" id="stock-drivetrain"> Originele motor en reductiekast voor dit Twizy-model bevestigd</label><label><input type="checkbox" id="brake-hardware"> Aangepaste remlichthardware aanwezig (alleen nodig bij gewijzigde remlichtdrempels)</label><div class="scenario-controls"><button class="button primary" id="prepare-vehicle">Voertuigplan voorbereiden</button><button class="button" id="restore-vehicle" hidden>Herstelplan bekijken</button><button class="button" id="verify-vehicle" hidden>Na contactcyclus controleren</button></div><p id="vehicle-write-status" class="helper" role="status"></p>`;
+$('page-tuning').appendChild(vehiclePanel);
+const vehicleDialog=document.createElement('dialog');
+vehicleDialog.innerHTML='<div class="modal wide"><div class="eyebrow">BEVESTIG EEN VOERTUIGWIJZIGING</div><h2>Controleer de echte registerwaarden.</h2><div id="vehicle-review"></div><button class="button primary full" id="confirm-vehicle">Dit plan naar de Twizy schrijven</button><button class="button full" id="close-vehicle">Annuleren</button></div>';
+document.body.appendChild(vehicleDialog);
+let vehicleReview=null;
+function renderVehicleWriter(){
+  const pending=state.vehicle_transaction;
+  const eligible=bootstrap.local&&state.connected&&state.limits.live_write&&!state.busy&&!state.session;
+  $('prepare-vehicle').disabled=!eligible||!!pending;
+  $('restore-vehicle').hidden=!pending;$('restore-vehicle').disabled=!eligible||pending?.phase==='corrupt';
+  $('verify-vehicle').hidden=pending?.phase!=='awaiting-contact-cycle';$('verify-vehicle').disabled=!eligible||!pending?.cycle_off_seen;
+  $('vehicle-write-status').textContent=pending?`Transactie: ${({'entering-configuration':'Configuratiemodus voorbereiden',writing:'Registers schrijven',restoring:'Originele waarden herstellen','committing-map':'Vermogenskaart bevestigen','awaiting-contact-cycle':'Contactcyclus wacht','recovery-required':'Herstel vereist',corrupt:'Journaal beschadigd',prepared:'Snapshot opgeslagen'})[pending.phase]||pending.phase}${pending.current?' · '+pending.current:''}. ${pending.error||''} ${pending.phase==='awaiting-contact-cycle'?(pending.cycle_off_seen?'Contact UIT waargenomen. Zet contact AAN, N, GO uit en houd de rem ingedrukt; controleer daarna.':'Laat de adapter aangesloten. Zet contact UIT en wacht tot dit hier is waargenomen; zet daarna weer AAN.'):''}`:state.mode==='demo'?'Demo: verbind eerst de vLinker met de Twizy. Er is geen schrijfverbinding geopend.':eligible?'Gereed voor een nieuwe beginsnapshot. Voorbereiden schrijft niets.':'Voertuigschrijven vereist een verbonden vLinker en een exact herkende, ondersteunde controller.';
+  $('confirm-vehicle').disabled=state.busy||!bootstrap.local||!state.connected;
+}
+function showVehicleReview(plan,restore=false){
+  vehicleReview={plan,restore};
+  $('vehicle-review').innerHTML=`<p class="helper">${esc(plan.identity.software)} · ${plan.changes.length} gewijzigde registers. ${restore?'Herstel gebruikt de originele backup van deze controller.':'Plan maximaal 120 seconden geldig; beginwaarden worden vóór schrijven opnieuw gecontroleerd.'}</p><div class="table-scroll"><table><thead><tr><th>REGISTER</th><th>UITGELEZEN</th><th>${restore?'ORIGINEEL':'DOEL'}</th></tr></thead><tbody>${plan.changes.map(r=>`<tr><td>${esc(r.address)}</td><td>${esc(r.before)}</td><td>${esc(r.raw)}</td></tr>`).join('')}</tbody></table></div><p class="helper">Level 4 → configuratiemodus → schrijven en teruglezen → controle na contactcyclus. Bij een fout stopt de procedure en blijft een hersteljournaal bewaard.</p>`;
+  $('confirm-vehicle').textContent=restore?'Originele waarden herstellen':'Dit plan naar de Twizy schrijven';
+  vehicleDialog.showModal();
+}
+action('prepare-vehicle',async()=>{const plan=await api('/api/vehicle/prepare',{values:draft,stock_drivetrain:$('stock-drivetrain').checked,brake_hardware:$('brake-hardware').checked,faults_resolved:$('faults-resolved').checked});await refresh();showVehicleReview(plan);});
+action('restore-vehicle',async()=>{const plan=await api('/api/vehicle/restore-plan',{transaction_id:state.vehicle_transaction.id});await refresh();showVehicleReview(plan,true);});
+action('confirm-vehicle',async()=>{const review=vehicleReview;vehicleReview=null;vehicleDialog.close();if(!review)return;try{await api(review.restore?'/api/vehicle/restore':'/api/vehicle/apply',review.restore?{transaction_id:review.plan.id}:{plan_id:review.plan.id,review_hash:review.plan.review_hash});toast('Teruggelezen waarden kloppen. De contactcyclus en hercontrole staan nog open.');}finally{await refresh();}});
+action('verify-vehicle',async()=>{await api('/api/vehicle/verify-cycle',{transaction_id:state.vehicle_transaction.id});await refresh();toast('Alle waarden na de waargenomen contactcyclus gecontroleerd.');});
+action('close-vehicle',async()=>{vehicleReview=null;vehicleDialog.close();});
 init();

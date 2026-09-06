@@ -13,6 +13,7 @@ from .catalog import compatibility, defaults, fingerprint, parameters, sdo_candi
 from .canopen import BusError, ElmLink, M5Link, SDO
 from .tuning import register_inventory, compare_snapshot, targets
 from .telemetry import decode_frames
+from .vehicle_write import VehicleWriter, VLinkerControl
 
 
 def now():
@@ -55,6 +56,7 @@ class PitService:
         self.revision = 0
         self.session = None
         self.started = clock()
+        self.vehicle_writer = VehicleWriter(self.directory, clock)
         self.pending_path = self.directory / "pending-demo.json"
         self.pending = None
         if self.pending_path.exists():
@@ -127,7 +129,7 @@ class PitService:
                         self.tick()
                     elif self.connected and not self.busy:
                         self.live_sample()
-                        self.stop.wait(1.5)
+                        self.stop.wait(.1 if self.vehicle_writer.pending and self.vehicle_writer.pending.get("phase") == "awaiting-contact-cycle" else 1.5)
                 except Exception as exc:
                     with self.lock:
                         self.connected = False
@@ -143,6 +145,20 @@ class PitService:
                 if self.mode != "live" or not self.link or self.busy:
                     return
                 link = self.link
+            if self.vehicle_writer.pending and isinstance(link, ElmLink):
+                frames, capture_errors = [], []
+                try:
+                    frames = [(i, data) for i, data, _ in link.safety_capture()]
+                    self.vehicle_writer.observe_contact_off(frames)
+                except BusError as exc:
+                    capture_errors.append(str(exc))
+                if self.vehicle_writer.pending.get("phase") == "awaiting-contact-cycle":
+                    # Observe the OFF transition without SDO timeouts disconnecting
+                    # the adapter while the controller is intentionally powered off.
+                    with self.lock:
+                        self.sample = dict(decode_frames(frames), at=now(), connected=bool(frames), errors=capture_errors)
+                        self._append_sample()
+                    return
             client = SDO(link)
             sample = dict(at=now(), source="live", connected=True, errors=[])
             for key, index, sub, width, signed in (("rpm", 0x606C, 0, 4, True), ("motor_temp", 0x4600, 3, 2, True), ("controller_temp", 0x5100, 4, 1, True)):
@@ -200,6 +216,7 @@ class PitService:
                     self.sample = {}
                     self.history = []
                     self.scan = self.plan = None
+                    self.vehicle_writer.plan = None
                     self.running = False
                     self.identity = {}
                     self.current = {}
@@ -246,7 +263,42 @@ class PitService:
                 self.mode = "offline"
                 self.sample = {}
                 self.plan = None
+                self.vehicle_writer.plan = None
                 self.event("Verbinding gesloten", "Geen busverbinding actief.")
+
+    def vehicle_action(self, action, **body):
+        if action not in ("prepare", "apply", "restore-plan", "restore", "verify-cycle"):
+            raise ValueError("Onbekende voertuigactie.")
+        with self.lock:
+            if self.mode != "live" or not self.connected or not isinstance(self.link, ElmLink):
+                raise ValueError("Verbind eerst de vLinker FS met de Twizy. Deze actie werkt niet in demo of via M5.")
+            if self.busy or self.session or self.pending:
+                raise ValueError("Rond eerst de lopende actie, opname of demo-transactie af.")
+            self.busy = True
+        try:
+            with self.bus_lock:
+                control = VLinkerControl(self.link)
+                if action == "prepare":
+                    result = self.vehicle_writer.prepare(control, **body)
+                elif action == "apply":
+                    result = self.vehicle_writer.apply(control, **body)
+                elif action == "restore":
+                    result = self.vehicle_writer.restore(control, **body)
+                elif action == "restore-plan":
+                    result = self.vehicle_writer.review_restore(control, **body)
+                else:
+                    result = self.vehicle_writer.verify_cycle(control, **body)
+            self.event("Voertuigactie: " + action, "Voorbereid schrijfplan." if action in ("prepare", "restore-plan") else result["phase"])
+            return result
+        except Exception as exc:
+            self.event("Voertuigactie gestopt", str(exc), "error")
+            raise
+        finally:
+            with self.lock:
+                self.busy = False
+                if action not in ("prepare", "restore-plan"):
+                    self.scan = self.plan = None
+                    self.revision += 1
 
     def diagnose(self):
         with self.lock:
@@ -334,7 +386,7 @@ class PitService:
                             mapping=meta[k]["mapping"]) for k, v in values.items() if self.current.get(k) != v]
             blockers = []
             if self.mode != "demo":
-                blockers.append("Live tuning is in deze release niet beschikbaar; uitlezen wel.")
+                blockers.append("Deze vergelijking is een ontwerp. Gebruik Voertuigplan voorbereiden voor een nieuwe vLinker-beginsnapshot.")
             if not comp["known"] or comp["locked"]:
                 blockers.append(comp["reason"])
             if not self.connected:
@@ -357,14 +409,14 @@ class PitService:
                         values=values, changes=changes, blockers=blockers, can_simulate=not blockers,
                         candidates=candidates, expires_in=60, mode=self.mode,
                         register_targets=register_targets, mapped_fields=len({k for r in register_targets for k in r["keys"]}),
-                        warning="Alle 43 velden zijn vertaald naar registerdoelen. Werkelijke beginwaarden komen alleen uit een identiteitsgebonden scan. Dit is geen uitvoerbare schrijfvolgorde; hardwarekwalificatie, eigenaarstoestemming, verse CAN-controles en kaartcommit blijven vereist.")
+                        warning="Alle 43 velden zijn vertaald naar registerdoelen. Werkelijke beginwaarden komen alleen uit een identiteitsgebonden scan. Voor de vLinker wordt de uitvoerbare volgorde apart voorbereid en bevestigd met een verse beginsnapshot en CAN-controles. Fysieke hardwarevalidatie staat nog open.")
             self.plan = dict(plan, deadline=self.clock()+60)
             return plan
 
     def apply_demo(self, plan_id):
         with self.lock:
             if self.mode != "demo":
-                raise ValueError("Live schrijven is niet geïmplementeerd.")
+                raise ValueError("Deze actie past alleen de simulator aan; gebruik het afzonderlijke voertuigschrijfplan.")
             plan = self.plan
             if not plan or plan["id"] != plan_id or self.clock() > plan["deadline"]:
                 raise ValueError("Plan ontbreekt of is verlopen; maak een nieuwe vergelijking.")
@@ -508,6 +560,8 @@ class PitService:
 
     def state(self):
         with self.lock:
+            comp = compatibility(self.identity)
+            write_available = self.mode == "live" and self.connected and isinstance(self.link, ElmLink) and comp["known"] and not comp["locked"]
             sample = self.sample.copy()
             if sample.get("at"):
                 sample["age"] = round(max(0, (datetime.now(timezone.utc)-datetime.fromisoformat(sample["at"])).total_seconds()), 1)
@@ -516,8 +570,9 @@ class PitService:
                         profile_name=self.profile_name, sample=sample, history=self.history[-90:], events=self.events[:30],
                         pending=self.pending, session={k:v for k,v in self.session.items() if k != "last_lap"} if self.session else None,
                         fault_scenario=self.fault_scenario, revision=self.revision, scan=self.scan,
+                        vehicle_transaction=self.vehicle_writer.status(),
                         parameters=parameters(compatibility(self.identity)["model"] or "80"),
-                        limits=dict(live_write=False, firmware_flash=False, full_ecu_diagnostics=False))
+                        limits=dict(live_write=write_available, write_route="vlinker-guarded", hardware_tested=False, firmware_flash=False, full_ecu_diagnostics=False))
 
 
 def re_id(value):

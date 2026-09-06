@@ -1,5 +1,16 @@
 # Validatie — 6 september 2026
 
+## Laptop 0.4.0
+
+101 Python-tests geslaagd. [STATUS-0.4.md](STATUS-0.4.md) beschrijft de nieuwe
+schrijftransactie, foutinjecties en hardwarebeperkingen. De byte-emulator opent
+geen seriële poort. Chromium: planvoorbereiding toonde 2920:01 van 1000 naar
+700; de bevestigingsknop voerde dit uit op de byte-emulator, read-back geslaagd
+en de transactie bleef wachten op een contactcyclus. Het herstelplan toonde
+700 naar de originele 1000 en werd via dezelfde browser bevestigd en teruggelezen.
+Geen voertuig uitgelezen,
+getuned of van foutcodes ontdaan.
+
 ## Laptop 0.3.2
 
 - 74 Python-tests: vijf nieuwe M5-protocoltests, waaronder twaalf gesimuleerde

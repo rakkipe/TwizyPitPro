@@ -10,3 +10,7 @@
 @media(max-width:740px){.metric-top{font-size:11px}.metric-value b{font-size:35px}.metric-bottom{font-size:9px}.metric-bottom .mini-bar{display:none}.vehicle-meta strong{font-size:10px}.vehicle-meta small{font-size:7px}.hero-bottom{font-size:10px}.hero-copy{padding:22px 19px}.hero-top .eyebrow{font-size:8px}.readiness-row strong{font-size:12px}.readiness-row small{font-size:11px}.stint-panel{flex-wrap:wrap;gap:15px}.studio-toolbar select{font-size:11px}.button{font-size:12px}.chart-legend,.chart-footer{font-size:9px}}
 .range-line input[type=range]{appearance:none;border:0;border-radius:6px;background:#dfe8d0;padding:0;height:5px}.range-line input[type=range]::-webkit-slider-thumb{appearance:none;width:13px;height:13px;border-radius:50%;background:#829e49;border:2px solid white;box-shadow:0 0 0 1px #829e49}.range-line input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:#829e49;border:2px solid white}
 @media(max-width:740px){.hero-sub{max-width:180px;line-height:1.65}.hero-art{top:40px}}
+
+[hidden]{display:none!important}
+.vehicle-write-panel>label{display:block;margin:12px 0;line-height:1.5;color:var(--muted)}
+.vehicle-write-panel input[type=checkbox]{width:auto;margin-right:8px;accent-color:#beff50}

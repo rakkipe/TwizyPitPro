@@ -92,16 +92,27 @@ class ElmLink:
         match = re.search(r"\b(\d{1,2}\.\d{1,2})V\b", response, re.I)
         return float(match[1]) if match else None
 
-    def _monitor(self, duration):
+    def _monitor(self, duration, timed=False):
         self.ser.reset_input_buffer()
         self.ser.write(b"ATMA\r")
         deadline = time.monotonic() + duration
         data = bytearray()
+        pending = bytearray()
+        stamped = []
+        def received(chunk):
+            data.extend(chunk)
+            if timed:
+                pending.extend(chunk.replace(b"\r", b"\n"))
+                while b"\n" in pending:
+                    line, _, tail = pending.partition(b"\n")
+                    pending[:] = tail
+                    at = time.monotonic()
+                    stamped.extend((can_id, raw, at) for can_id, raw in parse_elm_frames(line.decode("ascii", errors="replace")))
         prompted = False
         try:
             while time.monotonic() < deadline:
                 chunk = self.ser.read(self.ser.in_waiting or 1)
-                data.extend(chunk)
+                received(chunk)
                 if len(data) > 65536: raise BusError("CAN-monitorbuffer te groot.")
                 if b">" in chunk:
                     prompted = True
@@ -112,7 +123,7 @@ class ElmLink:
                 stop = time.monotonic()+1.5
                 while time.monotonic()<stop:
                     chunk=self.ser.read(self.ser.in_waiting or 1)
-                    data.extend(chunk)
+                    received(chunk)
                     if len(data)>98304: raise BusError("CAN-monitor stopt niet binnen de bufferlimiet.")
                     if b">" in chunk:
                         prompted=True
@@ -121,7 +132,50 @@ class ElmLink:
         text=data.decode("ascii",errors="replace")
         if any(error in text.upper() for error in ("BUFFER FULL","CAN ERROR","BUS ERROR","BUS OFF","?")):
             raise BusError("Adapter meldt een CAN-monitorfout; opname verworpen.")
-        return parse_elm_frames(text)
+        return stamped if timed else parse_elm_frames(text)
+
+    def safety_capture(self):
+        """All CAN IDs, including EMCY; receive timestamps are host observations."""
+        try:
+            for command in ("ATCSM1", "ATCM000", "ATCF000"):
+                if "OK" not in self.command(command).upper():
+                    raise BusError("Veiligheidsmonitor geweigerd: " + command)
+            return self._monitor(.35, timed=True)
+        finally:
+            if "OK" not in self.command("ATCRA581").upper():
+                raise BusError("SDO-filter herstellen mislukt.")
+
+    def write_guard(self, preop=False):
+        """Conservative write gate. No missing fields or stale frames accepted."""
+        client = SDO(self)
+        if client.number(0x1001, 0, 1) != 0:
+            raise BusError("CANopen foutregister actief; schrijven geblokkeerd.")
+        if client.number(0x606c, 0, 4, True) != 0:
+            raise BusError("Motor draait; schrijven geblokkeerd.")
+        voltage = self.voltage()
+        if voltage is None or not 12 <= voltage <= 15:
+            raise BusError("Geen stabiele 12V-voeding bevestigd (12–15 V vereist).")
+        frames = self.safety_capture()
+        current = time.monotonic()
+        latest, counts = {}, {}
+        for can_id, raw, at in frames:
+            if can_id == 0x81 and len(raw) == 8 and int.from_bytes(raw[:2], "little"):
+                raise BusError("SEVCON EMCY ontvangen; schrijven geblokkeerd.")
+            if can_id not in (0x597, 0x599, 0x59b):
+                continue
+            if len(raw) != 8 or not 0 <= current-at <= .75:
+                raise BusError("Ongeldig of verouderd veiligheidsframe.")
+            safe = (can_id == 0x597 and not raw[0]&0x20 and raw[1]&0x70 == 0x10
+                    or can_id == 0x599 and raw[6:8] == b"\0\0"
+                    or can_id == 0x59b and raw[0] == 0 and raw[1]&9 == 1 and raw[3] == 0)
+            if not safe:
+                raise BusError(f"Onveilige voertuigstatus in CAN {can_id:03X}; N, rem, GO uit, stilstand en gas los vereist.")
+            latest[can_id] = at
+            counts[can_id] = counts.get(can_id, 0)+1
+        if any(counts.get(can_id, 0) < 2 for can_id in (0x597, 0x599, 0x59b)):
+            raise BusError("Te weinig verse veiligheidsframes; schrijven geblokkeerd.")
+        return dict(aux=voltage, frame_ages={f"{i:03X}":current-at for i,at in latest.items()},
+                    checked_at=current, preop=preop)
 
     def capture(self):
         """Bounded, filtered listen-only capture; restore SDO receive filter."""

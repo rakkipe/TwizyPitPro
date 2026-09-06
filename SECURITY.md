@@ -1,6 +1,11 @@
 # Beveiliging
 
-Laptop 0.3.2 en Android 0.3.0 zijn previews voor demo en uitlezen. Er is geen live tuning- of flashroute en er is geen onafhankelijke beveiligingsaudit uitgevoerd.
+Laptop 0.4.0 heeft een gecontroleerde vLinker-schrijfroute, alleen offline getest.
+De oorspronkelijke instellingen worden opgeslagen vóór login of schrijven. Elk
+plan is kort geldig, eenmalig en gebonden aan een exacte controller en beginsnapshot.
+Bij fouten stopt de procedure zonder automatische rollback of reset. M5 en de
+Android-app 0.3.0 blijven alleen uitlezen. Foutwissen en ECU-flashen ontbreken.
+Er is geen onafhankelijke beveiligingsaudit uitgevoerd.
 
 ## Een probleem melden
 
