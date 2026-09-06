@@ -1,0 +1,28 @@
+{
+  "jdk": {
+    "version": "jdk-21.0.12.1+1",
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip",
+    "sha256": "f9d6e191ab098c0d416e7d588a24420a8621cd2f4720dab2459b8b7b2d2d8b4e"
+  },
+  "sdk": [
+    {
+      "package": "build-tools;35.0.0",
+      "url": "https://dl.google.com/android/repository/build-tools_r35_windows.zip",
+      "checksum": "af059bb67cf7786f45ee0db85e2d24985df1b4b6"
+    },
+    {
+      "package": "platforms;android-35",
+      "url": "https://dl.google.com/android/repository/platform-35_r02.zip",
+      "checksum": "0bb560a90a7a2cbd0dd8348224d518b638fe7949"
+    },
+    {
+      "package": "platform-tools",
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.1-win.zip",
+      "checksum": "e03e78b1d80b396f1c3358e31251cb31740e1110"
+    }
+  ],
+  "usb": {
+    "version": "3.10.0",
+    "sha256": "d4567aa07ce3984d05b0c8689e44c0373254810a2338c951ac59364be8dd6960"
+  }
+}

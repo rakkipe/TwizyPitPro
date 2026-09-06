@@ -1,0 +1,36 @@
+# Local runtime and vehicle/user data
+/.venv/
+/data/
+/output/
+__pycache__/
+*.py[cod]
+*.log
+/.playwright-cli/
+/.npm-cache/
+*.lnk
+
+# Credentials, certificates with private keys and local configuration
+.env
+.env.*
+!.env.example
+/android-signing/
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.dpapi
+*.key
+*.pem
+local.properties
+
+# Toolchains, generated files and binary releases (publish selected assets separately)
+/android-tools/
+**/build/
+**/build-cache/
+/releases/
+*.apk
+*.aab
+.gradle/
+.idea/
+.DS_Store
+Thumbs.db

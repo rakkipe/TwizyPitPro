@@ -1,0 +1,13 @@
+<resources>
+    <style name="PitTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#D2FA69</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#101412</item>
+        <item name="android:navigationBarColor">#101412</item>
+        <item name="android:statusBarColor">#101412</item>
+    </style>
+    <color name="icon_background">#151B18</color>
+</resources>
