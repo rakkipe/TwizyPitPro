@@ -159,6 +159,7 @@ class VehicleWriter:
         self.path = self.directory / "pending-vehicle.json"
         self.clock = clock
         self.plan = None
+        self.restore_plan = None
         self.pending = None
         self.access_path = self.directory / "pending-access.json"
         self.access = None
@@ -327,6 +328,11 @@ class VehicleWriter:
         for row in rows:
             if not selected.intersection(row["keys"]):
                 row.update(raw=row["before"], changed=False)
+        # Validate the effective configuration, including preserved live values.
+        if selected & {"speed", "warn"}:
+            effective = {row["address"]: row["raw"] for row in rows}
+            if effective["3813:34"] <= effective["2920:05"]:
+                raise ValueError("De overspeedwaarschuwing moet boven de uiteindelijke maximumsnelheid liggen. Selecteer passende snelheid- en waarschuwingsdoelen samen.")
         changes = ordered_changes(rows)
         if not changes:
             raise ValueError("Alle registerdoelen zijn al gelijk aan de uitgelezen waarden.")
@@ -410,6 +416,7 @@ class VehicleWriter:
             raise
 
     def review_restore(self, control, transaction_id):
+        self.restore_plan = None
         if not self.pending or self.pending.get("id") != transaction_id or self.pending["phase"] == "corrupt":
             raise ValueError("Geen passende hersteltransactie.")
         self._identity(control, self.pending["identity"])
@@ -417,7 +424,11 @@ class VehicleWriter:
             raise ValueError("Onbekende controllerstand; herstel geblokkeerd.")
         control.guard(preop=control.state() == 127)
         with self._authenticated(control, self.pending["identity"], "restore-review", resume=True):
-            return self._review_restore_authenticated(control, transaction_id)
+            plan = self._review_restore_authenticated(control, transaction_id)
+        plan.update(review_id=uuid.uuid4().hex, expires_in=120, deadline=self.clock()+120)
+        plan["review_hash"] = digest({k: plan[k] for k in ("id", "review_id", "identity", "rows")})
+        self.restore_plan = copy.deepcopy(plan)
+        return {k: copy.deepcopy(v) for k, v in plan.items() if k != "deadline"}
 
     def _review_restore_authenticated(self, control, transaction_id):
         rows = []
@@ -428,16 +439,25 @@ class VehicleWriter:
             rows.append(dict(original, before=actual, raw=original["before"]))
         return dict(id=transaction_id, rows=rows, changes=ordered_changes(rows), identity=copy.deepcopy(self.pending["identity"]))
 
-    def restore(self, control, transaction_id):
+    def restore(self, control, transaction_id, review_hash=None):
+        plan, self.restore_plan = self.restore_plan, None
         if not self.pending or self.pending.get("id") != transaction_id or self.pending["phase"] == "corrupt":
             raise ValueError("Geen passende hersteltransactie.")
-        self._identity(control, self.pending["identity"])
+        if not plan or plan["id"] != transaction_id or plan["review_hash"] != review_hash or self.clock() > plan["deadline"]:
+            raise ValueError("Herstelplan ontbreekt, wijkt af of is verlopen; bekijk een nieuw herstelplan.")
+        self._identity(control, plan["identity"])
         control.guard(preop=control.state() == 127)
         with self._authenticated(control, self.pending["identity"], "restore", resume=True):
-            review = self._review_restore_authenticated(control, transaction_id)
+            for row in plan["rows"]:
+                if control.read(row) != row["before"]:
+                    raise ValueError("Beginwaarde gewijzigd bij " + row["address"] + "; bekijk een nieuw herstelplan.")
+            self._identity(control, plan["identity"])
+            control.guard(preop=control.state() == 127)
+            if self.clock() > plan["deadline"]:
+                raise ValueError("Herstelplan verlopen tijdens de controle; bekijk een nieuw herstelplan.")
             self.pending["cycle_off_seen"] = False
             self._persist()
-            self._execute(control, review["changes"], restore=True)
+            self._execute(control, plan["changes"], restore=True)
         return self.status()
 
     def observe_contact_off(self, samples):

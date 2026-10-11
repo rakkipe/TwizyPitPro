@@ -231,7 +231,8 @@ class VehicleWriteTests(unittest.TestCase):
         self.assertEqual(self.control.state(), 127)
         self.writer = VehicleWriter(self.temp.name)
         self.assertTrue(self.writer.pending["interrupted"])
-        result = self.writer.restore(self.control, plan["id"])
+        review = self.writer.review_restore(self.control, plan["id"])
+        result = self.writer.restore(self.control, plan["id"], review["review_hash"])
         self.assertTrue(result["restored"])
         self.assertEqual(self.link.objects[0x2920, 1], (1000).to_bytes(2, "little"))
         self.finish_cycle()
@@ -280,7 +281,8 @@ class VehicleWriteTests(unittest.TestCase):
         self.apply(plan)
         self.link.objects[0x2920, 1] = (300).to_bytes(2, "little")
         before = len(self.link.downloads)
-        with self.assertRaises(ValueError): self.writer.restore(self.control, plan["id"])
+        with self.assertRaisesRegex(ValueError, "Onverwachte waarde"):
+            self.writer.review_restore(self.control, plan["id"])
         self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads[before:]))
 
     def test_expired_guard_prevents_protocol_transmission(self):
@@ -334,9 +336,83 @@ class VehicleWriteTests(unittest.TestCase):
         self.link.bad_ack = (0x4641, 1)
         with self.assertRaises(BusError): self.apply(plan)
         self.assertEqual(self.writer.pending["phase"], "recovery-required")
-        self.writer.restore(self.control, plan["id"])
+        review = self.writer.review_restore(self.control, plan["id"])
+        self.writer.restore(self.control, plan["id"], review["review_hash"])
         self.assertEqual(len([x for x in self.link.downloads if x[0] == (0x4641, 1)]), 2)
         self.finish_cycle()
+
+    def test_restore_rejects_a_new_change_in_a_register_not_shown_in_review(self):
+        plan = self.prepare({**self.values, "neutral": 15})
+        self.link.bad_ack = (0x2920, 1)
+        with self.assertRaises(BusError): self.apply(plan)
+        review = self.writer.review_restore(self.control, plan["id"])
+        self.assertEqual([r["address"] for r in review["changes"]], ["2920:01"])
+        neutral = next(r for r in plan["rows"] if r["address"] == "2920:03")
+        self.link.objects[0x2920, 3] = neutral["raw"].to_bytes(2, "little")
+        start = len(self.link.downloads)
+        with self.assertRaisesRegex(ValueError, "Beginwaarde gewijzigd bij 2920:03"):
+            self.writer.restore(self.control, plan["id"], review["review_hash"])
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads[start:]))
+        self.assertEqual(self.control.state(), 127)
+        # An explicit new review is required before either register can be restored.
+        review = self.writer.review_restore(self.control, plan["id"])
+        self.assertEqual({r["address"] for r in review["changes"]}, {"2920:01", "2920:03"})
+        self.writer.restore(self.control, plan["id"], review["review_hash"])
+        self.assertEqual(self.link.objects[0x2920, 3], neutral["before"].to_bytes(2, "little"))
+
+    def test_restore_rejects_missing_wrong_expired_and_reused_reviews_without_writes(self):
+        plan = self.prepare()
+        self.apply(plan)
+        for scenario in ("missing", "wrong", "expired", "reused", "restart"):
+            with self.subTest(scenario=scenario):
+                review = self.writer.review_restore(self.control, plan["id"])
+                if scenario == "missing":
+                    token = None
+                elif scenario == "wrong":
+                    token = "wrong"
+                elif scenario == "expired":
+                    self.writer.restore_plan["deadline"] = self.writer.clock()-1
+                    token = review["review_hash"]
+                elif scenario == "reused":
+                    self.writer.review_restore(self.control, plan["id"])
+                    token = review["review_hash"]
+                else:
+                    self.writer = VehicleWriter(self.temp.name)
+                    token = review["review_hash"]
+                start = list(self.link.downloads)
+                with self.assertRaisesRegex(ValueError, "Herstelplan"):
+                    self.writer.restore(self.control, plan["id"], token)
+                self.assertEqual(self.link.downloads, start)
+                with self.assertRaises(ValueError):
+                    self.writer.restore(self.control, plan["id"], review["review_hash"])
+
+    def test_restore_review_is_frozen_and_single_use_on_success(self):
+        plan = self.prepare()
+        self.apply(plan)
+        review = self.writer.review_restore(self.control, plan["id"])
+        review["changes"][0]["raw"] = 999
+        self.writer.restore(self.control, plan["id"], review["review_hash"])
+        self.assertEqual(self.link.objects[0x2920, 1], (1000).to_bytes(2, "little"))
+        start = list(self.link.downloads)
+        with self.assertRaises(ValueError):
+            self.writer.restore(self.control, plan["id"], review["review_hash"])
+        self.assertEqual(self.link.downloads, start)
+
+    def test_restore_expiring_during_read_checks_never_enters_configuration(self):
+        plan = self.prepare()
+        self.apply(plan)
+        review = self.writer.review_restore(self.control, plan["id"])
+        read = self.control.read
+        def expired(row):
+            self.writer.clock = lambda: float("inf")
+            return read(row)
+        start = len(self.link.downloads)
+        sent = len(self.link.sent)
+        with patch.object(self.control, "read", side_effect=expired):
+            with self.assertRaisesRegex(ValueError, "verlopen tijdens"):
+                self.writer.restore(self.control, plan["id"], review["review_hash"])
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads[start:]))
+        self.assertNotIn("ATSH000", self.link.sent[sent:])
 
 
 if __name__ == "__main__":

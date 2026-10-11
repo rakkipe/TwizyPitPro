@@ -1,5 +1,13 @@
 > Update 0.4.1-preview: 123 Python-tests en 26 Android-kerncontroles geslaagd. Zie [actuele status](STATUS-0.4.1.md). Onderstaande eerdere testregistraties blijven historisch.
 
+## Regressieherstel — 11 oktober 2026
+
+- 140 Python-tests geslaagd op Windows, inclusief gedeeltelijke speed/warn-selectie met behouden voertuigwaarden, herstelplannen met hash/verval/eenmalig gebruik, gewijzigde beginwaarden en herstel via HTTP.
+- Startscriptchecks voeren het echte PowerShell-script uit met nagebootste HTTP- en procesaanroepen. Beide netwerkmodi, een bestaande verkeerde modus, ontbrekende modusinformatie en het aanmaken van de logmap worden gecontroleerd.
+- 26 Android-kernchecks slagen via het vernieuwde testscript. Alle vijf geteste bronklassen worden opnieuw gecompileerd in een tijdelijke map, met Android/USB-stubs. Een aparte regressietest bewijst dat oude APK/testklassen worden genegeerd en dat een fout in de huidige Java-broncode wordt gevonden.
+- JavaScript-syntax gecontroleerd. CI is uitgebreid met Linux en Windows en voert eerst de Android-kernchecks uit. De aangepaste CI-configuratie is lokaal voorbereid; een GitHub-run staat nog open.
+- Geen APK, M5-firmware of voertuig gewijzigd. Deze controles zijn geen fysieke validatie van tuning, Android UI, Keystore of USB.
+
 # Validatie — 6 september 2026
 
 ## Laptop 0.4.0

@@ -8,6 +8,7 @@ from unittest.mock import PropertyMock, patch
 
 from app import Handler, Server
 from pit.service import PitService
+from test_vehicle_write import BenchElm
 
 
 class HttpTests(unittest.TestCase):
@@ -87,6 +88,25 @@ class HttpTests(unittest.TestCase):
                 self.assertEqual(self.request("POST","/api/vehicle/"+action,{},headers)[0],403)
                 with patch.object(Handler,"local",new_callable=PropertyMock,return_value=False):
                     self.assertEqual(self.request("POST","/api/vehicle/"+action,{},self.headers())[0],403)
+
+    def test_restore_http_requires_the_reviewed_hash_and_a_fresh_review_after_rejection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = PitService(directory)
+            service.mode, service.link = "live", BenchElm()
+            def post(action, body):
+                status, data = self.request("POST", "/api/vehicle/"+action, body, self.headers())
+                return status, json.loads(data)
+            with patch.object(self.server, "service", service), patch("pit.service.read_cluster", return_value={"entries": []}):
+                status, plan = post("prepare", {"values": {**service.current, "drive": 70}, "stock_drivetrain": True, "faults_resolved": True})
+                self.assertEqual(status, 200, plan)
+                self.assertEqual(post("apply", {"plan_id": plan["id"], "review_hash": plan["review_hash"]})[0], 200)
+                self.assertEqual(post("restore-plan", {"transaction_id": plan["id"]})[0], 200)
+                self.assertEqual(post("restore", {"transaction_id": plan["id"]})[0], 400)
+                status, review = post("restore-plan", {"transaction_id": plan["id"]})
+                self.assertEqual(status, 200, review)
+                body = {"transaction_id": plan["id"], "review_hash": review["review_hash"]}
+                self.assertEqual(post("restore", body)[0], 200)
+                self.assertEqual(post("restore", body)[0], 400)
     def test_nonobject_request_rejected(self):
         status,_=self.request("POST","/api/demo",[],self.headers())
         self.assertEqual(status,400)

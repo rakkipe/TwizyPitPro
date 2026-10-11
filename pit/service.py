@@ -218,6 +218,7 @@ class PitService:
                     self.history = []
                     self.scan = self.plan = None
                     self.vehicle_writer.plan = None
+                    self.vehicle_writer.restore_plan = None
                     self.running = False
                     self.identity = {}
                     self.current = {}
@@ -265,6 +266,7 @@ class PitService:
                 self.sample = {}
                 self.plan = None
                 self.vehicle_writer.plan = None
+                self.vehicle_writer.restore_plan = None
                 self.event("Verbinding gesloten", "Geen busverbinding actief.")
 
     def vehicle_action(self, action, **body):

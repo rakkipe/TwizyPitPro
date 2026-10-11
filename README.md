@@ -51,6 +51,8 @@ Open daarna `http://127.0.0.1:8765`. De laptop vraagt geen appwachtwoord. Wie to
 
 `Start.vbs` of `Start.ps1` zonder `-LocalOnly` maakt de telefoonviewer beschikbaar op het lokale netwerk. Gebruik daarvoor je eigen hotspot of vertrouwd wifi: deze viewer gebruikt HTTP met een tijdelijke toegangssleutel, zonder TLS. Firewallregels worden niet automatisch gewijzigd.
 
+Een al draaiende server wordt alleen hergebruikt als de netwerkmodus overeenkomt. Bij wisselen tussen LAN en `-LocalOnly` meldt het startscript dat je de bestaande server eerst moet afsluiten. Het onderbreekt geen lopende voertuigactie.
+
 Wil je de APK via de laptopknop aanbieden, plaats dan het releasebestand in `releases/android/TwizyPitPro-0.3.1.apk`. APK's en persoonlijke gegevens zitten niet in de Git-broncode.
 
 ## Ontwikkelen en testen
@@ -61,10 +63,12 @@ De laptop gebruikt Python, standaardbibliotheek HTTP en `pyserial==3.5`. De Andr
 # Na Install.ps1: de offline Python-tests
 .\.venv\Scripts\python.exe -m unittest discover -s tests -q
 
-# Android: bouwtools downloaden, ongetekend bouwen, 26 kerncontroles
+# Android: 26 kerncontroles op actuele broncode (JDK 11+, geen SDK/APK nodig)
+.\.venv\Scripts\python.exe scripts\test_android.py
+
+# Android-APK: bouwtools downloaden en ongetekend bouwen
 .\.venv\Scripts\python.exe scripts\setup_android.py
 .\android\Build.ps1 -Unsigned
-.\.venv\Scripts\python.exe scripts\test_android.py
 
 # Een eigen installabele APK ondertekenen
 .\android\Initialize-AndroidSigning.ps1
@@ -72,6 +76,8 @@ De laptop gebruikt Python, standaardbibliotheek HTTP en `pyserial==3.5`. De Andr
 ```
 
 De ongetekende APK staat onder `android/build/aligned.apk`; de getekende onder `releases/android/`. Initialisatie maakt **jouw eigen** lokale sleutel. Daarmee kun je de officiële APK niet als update vervangen. Bewaar eigen sleutels buiten Git. De scripts downloaden bouwafhankelijkheden; de voor 0.2.0 gebruikte versies staan in [de bouwregistratie](docs/android-build-dependencies.json). Het setupscript kiest de nieuwste Java 21-release en kan bij een latere uitvoering andere bouwtools ophalen; een identieke binaire rebuild is niet gegarandeerd.
+
+De kernchecks compileren alle vijf geteste Java-klassen uit de huidige broncode in een tijdelijke map. Oude APK- en testklassen worden genegeerd. Ze gebruiken Android/USB-stubs die platformgebruik weigeren; UI, biometrie, Keystore en echte USB vereisen aparte Android-tests. De eerste uitvoering downloadt de vaste org.json-testafhankelijkheid; daarna kan deze controle offline. `PIT_ANDROID_TOOLS` of `--tools` kiest de cachemap. CI voert de kernchecks en Python-regressietests uit op Linux en Windows, inclusief de startscriptcontroles op Windows.
 
 Voor laptop 0.4.1 zijn 123 Python-tests geslaagd. Voor Android 0.3.1 waren 26 kerncontroles geslaagd; de ondertekende APK en goedkeuringsflow zijn in een Android 11-emulator getest. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python-tests uit. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
 

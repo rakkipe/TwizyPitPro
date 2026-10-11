@@ -12,6 +12,7 @@ try {
     $pitActive = [bool]$pitStatus.version
 } catch {}
 if (-not $pitActive) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $pitRoot 'data') | Out-Null
     $pitArgs = @('"' + (Join-Path $pitRoot 'app.py') + '"')
     if (-not $LocalOnly) { $pitArgs += '--lan' }
     Start-Process -FilePath $pitPython -ArgumentList $pitArgs -WorkingDirectory $pitRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $pitRoot 'data\server.log') -RedirectStandardError (Join-Path $pitRoot 'data\server-error.log') | Out-Null
@@ -21,4 +22,8 @@ if (-not $pitActive) {
     }
 }
 if (-not $pitActive) { throw 'Twizy Pit Pro startte niet. Bekijk data\server-error.log.' }
+if ($pitStatus.lan -isnot [bool] -or $pitStatus.lan -ne (-not $LocalOnly)) {
+    $pitRequestedMode = if ($LocalOnly) { 'alleen lokaal' } else { 'met LAN-viewer' }
+    throw "De actieve server draait niet in de gevraagde modus ($pitRequestedMode). Sluit de bestaande server eerst af en start opnieuw; een lopende voertuigactie wordt niet automatisch onderbroken."
+}
 if (-not $NoBrowser) { Start-Process $pitUrl }

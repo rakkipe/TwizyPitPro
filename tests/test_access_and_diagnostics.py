@@ -129,7 +129,7 @@ class AccessTests(unittest.TestCase):
         review = writer.review_restore(self.control, plan["id"])
         self.assertEqual(len(review["changes"]), 1)
         self.assertEqual(self.control.level(), 0)
-        writer.restore(self.control, plan["id"])
+        writer.restore(self.control, plan["id"], review["review_hash"])
         self.assertEqual(self.link.objects[0x2920, 1], (1000).to_bytes(2, "little"))
 
     def test_selected_field_preserves_custom_registers(self):
@@ -148,6 +148,39 @@ class AccessTests(unittest.TestCase):
                 self.writer.prepare(self.control, defaults(), stock_drivetrain=True,
                                     faults_resolved=True, selected_keys=keys)
         self.assertEqual(self.link.downloads, [])
+
+    def test_partial_warning_selection_checks_preserved_live_speed_for_both_models(self):
+        for model in ("45", "80"):
+            with self.subTest(model=model), tempfile.TemporaryDirectory() as directory:
+                link = BenchElm(model)
+                control, writer = VLinkerControl(link), VehicleWriter(directory)
+                values = {**defaults(model), "speed": 6, "warn": 10}
+                with self.assertRaisesRegex(ValueError, "uiteindelijke maximumsnelheid"):
+                    writer.prepare(control, values, stock_drivetrain=True,
+                                   faults_resolved=True, selected_keys=["warn"])
+                self.assertTrue(all(key[0] == 0x5000 for key, _ in link.downloads))
+                self.assertEqual(control.state(), 5)
+                self.assertIsNone(writer.plan)
+
+    def test_partial_speed_selection_checks_preserved_live_warning(self):
+        values = {**defaults(), "speed": 100, "warn": 110}
+        coupled = ["speed", "torque", "current", "power_low", "power_high"]
+        with self.assertRaisesRegex(ValueError, "uiteindelijke maximumsnelheid"):
+            self.writer.prepare(self.control, values, stock_drivetrain=True,
+                                faults_resolved=True, selected_keys=coupled)
+        self.assertTrue(all(key[0] == 0x5000 for key, _ in self.link.downloads))
+        plan = self.writer.prepare(self.control, values, stock_drivetrain=True,
+                                   faults_resolved=True, selected_keys=coupled+["warn"])
+        rows = {r["address"]: r["raw"] for r in plan["rows"]}
+        self.assertGreater(rows["3813:34"], rows["2920:05"])
+
+    def test_valid_warning_only_selection_preserves_live_speed(self):
+        plan = self.writer.prepare(self.control, {**defaults(), "speed": 6, "warn": 100},
+                                   stock_drivetrain=True, faults_resolved=True, selected_keys=["warn"])
+        self.assertEqual({r["address"] for r in plan["changes"]}, {"3813:34", "3813:3C"})
+        self.writer.apply(self.control, plan["id"], plan["review_hash"])
+        self.assertEqual(self.link.objects[0x2920, 5], (7250).to_bytes(2, "little"))
+        self.assertGreater(int.from_bytes(self.link.objects[0x3813, 0x34], "little"), 7250)
 
     def test_fresh_neutral_20_is_accepted_and_unknown_or_drive_rejected(self):
         capture = self.link.safety_capture
