@@ -21,9 +21,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import static be.peter.twizypitpro.Model.put;
 
-/** Native Android UI and owner approval coordinator. No WebView and no live writer. */
+/** Native Android UI and per-operation approval for the guarded USB writer. */
 public final class MainActivity extends Activity implements LocationListener {
     private static final int BG=0xff101412,CARD=0xff1b221e,LIME=0xffd2fa69,TEXT=0xfff1f5ef,MUTED=0xff9aac9f,RED=0xffff9c87;
     private static final String USB_PERMISSION="be.peter.twizypitpro.USB_PERMISSION";
@@ -35,15 +37,20 @@ public final class MainActivity extends Activity implements LocationListener {
     private int page=0,generation=0,linkEpoch=0;private boolean visible,authBusy,ioBusy,demoRunning,gpsOn,recording;
     private CancellationSignal authCancel;private String mode="demo",connectionNote="Zelfstandige simulator",pendingExport,pendingExportType;
     private CanReader reader;private LaptopLink laptop;private UsbSerialDriver pendingUsb;private boolean pendingM5;
+    private VehicleWriter vehicleWriter;private JSONObject vehiclePending,vehicleAccess,vehicleReview;
+    private final Set<String> writeSelection=new HashSet<>();private boolean writerBusy;
+    private AtomicBoolean writerCancellation;
+    private Button prepareVehicleButton;private TextView vehicleSelectionText;
     private JSONArray samples=new JSONArray(),laps=new JSONArray();private long started=SystemClock.elapsedRealtime(),recordStart,lastLap,lastSampleAt,liveSampleAt;
     private String recordName="",recordMode="";private Location gps;private LocationManager locations;
-    private final Runnable heartbeat=new Runnable(){public void run(){if(!visible)return;tick();ui.postDelayed(this,1000);}};
+    private final Runnable heartbeat=new Runnable(){public void run(){if(!visible)return;tick();ui.postDelayed(this,vehiclePending!=null&&vehiclePending.optString("phase").equals("awaiting-contact-cycle")?250:1000);}};
 
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         try{
             model=new Model(this);vault=new Vault(this);config=vault.load();if(config==null)config=model.fresh();
             validateConfig(config);draft=Model.copy(config.optJSONObject("values"));
+            vehicleWriter=new VehicleWriter(model,new VehicleStore(getFilesDir(),vault));vehiclePending=vehicleWriter.status();vehicleAccess=vehicleWriter.accessStatus();
             locations=getSystemService(LocationManager.class);buildShell();showPage(0);setupUsbReceiver();
         }catch(Exception e){LinearLayout fatal=column();fatal.setPadding(dp(24),dp(60),dp(24),dp(24));fatal.setBackgroundColor(BG);fatal.addView(text("Kluis vergrendeld",28,TEXT,true));fatal.addView(text("Bestaande gegevens zijn niet gewijzigd.\n"+safeError(e),16,RED,false));setContentView(fatal);}
     }
@@ -78,7 +85,7 @@ public final class MainActivity extends Activity implements LocationListener {
     private void title(String label,String heading,String sub){TextView tag=text(label,10,LIME,true);tag.setLetterSpacing(.14f);content.addView(tag);TextView h=text(heading,30,TEXT,true);h.setPadding(0,dp(8),0,dp(5));content.addView(h);TextView s=text(sub,13,MUTED,false);s.setPadding(0,0,0,dp(20));content.addView(s);}
     private void kv(LinearLayout parent,String key,String value){LinearLayout r=row();r.setPadding(0,dp(8),0,dp(8));r.addView(text(key,12,MUTED,false),new LinearLayout.LayoutParams(0,-2,1));TextView v=text(value,12,TEXT,true);v.setGravity(Gravity.END);r.addView(v,new LinearLayout.LayoutParams(0,-2,1));parent.addView(r);}
     private EditText input(String hint,String value){EditText e=new EditText(this);e.setHint(hint);e.setText(value);e.setTextColor(TEXT);e.setHintTextColor(MUTED);e.setSingleLine(true);e.setTextSize(14);e.setPadding(dp(10),dp(12),dp(10),dp(12));e.setBackground(background(0xff111813,8));e.setFilters(new InputFilter[]{new InputFilter.LengthFilter(160)});return e;}
-    private void showPage(int index){if(content==null||config==null)return;page=index;content.removeAllViews();metrics.clear();speedText=null;gpsText=null;sessionText=null;chart=null;
+    private void showPage(int index){if(content==null||config==null)return;page=index;content.removeAllViews();metrics.clear();speedText=null;gpsText=null;sessionText=null;chart=null;prepareVehicleButton=null;vehicleSelectionText=null;
         for(int i=0;i<nav.getChildCount();i++){Button b=(Button)nav.getChildAt(i);b.setTextColor(i==page?LIME:MUTED);b.setBackground(background(i==page?0xff31402a:CARD,10));}
         switch(page){case 0:dashboard();break;case 1:diagnostics();break;case 2:tuning();break;case 3:sessions();break;case 4:profiles();break;default:garage();}
         updateMetrics();pageScroll.post(()->pageScroll.scrollTo(0,0));
@@ -87,7 +94,8 @@ public final class MainActivity extends Activity implements LocationListener {
         title("RACE WEEKEND / PIT WALL","Klaar voor je volgende stint.","Diagnose, afstelling en sessiedata op één plek.");
         LinearLayout hero=card(null,null);GradientDrawable heroBackground=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0xff35472a,0xff1c2a20});heroBackground.setCornerRadius(dp(20));hero.setBackground(heroBackground);hero.setPadding(dp(20),dp(20),dp(20),dp(20));
         modeText=text(sourceLabel(),10,LIME,true);hero.addView(modeText);TextView car=text("TWIZY "+displayModel(),42,TEXT,true);car.setLetterSpacing(-.04f);hero.addView(car);
-        kv(hero,"Controllerfirmware",displayFirmware());kv(hero,"Verbinding",connectionNote);kv(hero,"Live schrijftoegang","Geblokkeerd");
+        kv(hero,"Controllerfirmware",displayFirmware());kv(hero,"Verbinding",connectionNote);kv(hero,"Live schrijftoegang","vLinker USB · via bekeken plan in Tuning");
+        if(vehiclePending!=null||vehicleAccess!=null){LinearLayout recovery=card("Voertuigherstel staat open","Verbind dezelfde vLinker en controller. Open Tuning om de transactie te controleren of herstellen.");addButton(recovery,"Open voertuigprocedure",true,()->showPage(2));}
         LinearLayout speed=row();speed.setGravity(Gravity.BOTTOM);speedText=text("0",64,TEXT,true);speed.addView(speedText);TextView unit=text(" km/u",17,MUTED,false);unit.setPadding(0,0,0,dp(13));speed.addView(unit);hero.addView(speed);
         hero.addView(text(mode.equals("demo")?"Synthetische snelheid · geen prestatievoorspelling":"Snelheid onbekend zonder gekwalificeerde decoder",11,MUTED,false));
         if(mode.equals("demo"))addButton(hero,demoRunning?"Terug naar de pit ↙":"Start demoronde ↗",true,()->approve("Demoronde "+(demoRunning?"stoppen":"starten"),Model.copy(config),()->{demoRunning=!demoRunning;showPage(0);}));
@@ -115,7 +123,7 @@ public final class MainActivity extends Activity implements LocationListener {
         LinearLayout id=card("Voertuigpaspoort",mode.equals("demo")?"Deze identiteit is gesimuleerd.":"Alleen daadwerkelijk gelezen velden worden ingevuld.");
         kv(id,"Model", "Twizy "+displayModel());kv(id,"Software",displayFirmware());kv(id,"Hardware",mode.equals("demo")?"DEMO-HW":identity.optString("hardware","Onbekend"));kv(id,"Serienummer",mode.equals("demo")?"DEMO":identity.optString("serial","Onbekend"));kv(id,"Dictionaryrevisie",mode.equals("demo")?String.format("0x%X",Model.revision(displayFirmware())):identity.has("revision")?String.format("0x%X",identity.optLong("revision")):"Onbekend");
         boolean known=Model.known(displayModel(),displayFirmware(),mode.equals("demo")?Model.revision(displayFirmware()):identity.optLong("revision",-1));
-        kv(id,"Referentieschema",known?"Exacte combinatie herkend":"Onbekend / geblokkeerd");kv(id,"Voertuigschrijven","Niet beschikbaar");
+        kv(id,"Referentieschema",known?"Exacte combinatie herkend":"Onbekend / geblokkeerd");kv(id,"Voertuigschrijven","vLinker USB · apart plan in Tuning");
         addButton(id,"Diagnose uitvoeren",true,()->runScan());
         LinearLayout report=card("Diagnoserapport",scan==null?"Nog geen scan in deze verbinding.":scan.optString("scope","Controlleruitlezing"));
         if(scan!=null){kv(report,"Tijdstip",scan.optString("at"));kv(report,"Herkomst",scan.optString("mode"));kv(report,"Volledig binnen scope",scan.optBoolean("complete")?"Ja":"Nee, leesfouten aanwezig");
@@ -132,8 +140,87 @@ public final class MainActivity extends Activity implements LocationListener {
         EditText search=input("Zoek instelling of groep…","");info.addView(search);
         LinearLayout buttons=row();Button compare=button("Vergelijk",true,()->compareDraft());Button save=button("Profiel opslaan",false,()->saveProfile());buttons.addView(compare,new LinearLayout.LayoutParams(0,dp(48),1));LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,dp(48),1);bp.leftMargin=dp(8);buttons.addView(save,bp);info.addView(buttons);
         addButton(info,"Registerdoelen & scanvergelijking",false,()->registerPlan());
+        vehiclePanel();
         LinearLayout groups=column();content.addView(groups);
         renderParameters(groups,"");search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){renderParameters(groups,s.toString());}public void afterTextChanged(Editable e){}});
+    }
+    private interface VehicleTask {JSONObject run(VehicleWriter.Port control) throws Exception;}
+    private void vehicleAction(String label,VehicleTask task,Consumer<JSONObject> success){
+        if(writerBusy||authBusy||recording||samples.length()>0)throw new IllegalStateException("Rond eerst de lopende actie of opname af.");
+        if(!mode.equals("usb")||reader==null||!reader.canWrite())throw new IllegalStateException("Verbind de vLinker via USB. M5 en laptopviewer schrijven niet.");
+        final CanReader connected=reader;final int epoch=linkEpoch;
+        approve(label,Model.copy(config),()->{
+            if(!visible||reader!=connected||linkEpoch!=epoch||writerBusy)throw new IllegalStateException("Verbinding of beginsituatie gewijzigd; bekijk een nieuw plan.");
+            writerBusy=true;ioBusy=true;AtomicBoolean cancelled=new AtomicBoolean(false);writerCancellation=cancelled;toast(label+"…");showPage(page);
+            worker.execute(()->{
+                JSONObject result=null;Exception failure=null;
+                try{result=task.run(new VehicleControl(connected.writerBus(),()->!cancelled.get()));}catch(Exception e){failure=e;}
+                final JSONObject completed=result,pending=vehicleWriter.status(),access=vehicleWriter.accessStatus();final Exception error=failure;
+                ui.post(()->{
+                    if(writerCancellation==cancelled){writerBusy=false;writerCancellation=null;}
+                    vehiclePending=pending;vehicleAccess=access;
+                    if(reader==connected&&linkEpoch==epoch)ioBusy=false;
+                    if(!visible||reader!=connected||linkEpoch!=epoch)return;
+                    if(error!=null){vehicleReview=null;showPage(2);error(error);}else{success.accept(completed);}
+                });
+            });
+        });
+    }
+    private void selectWriteField(String key){
+        if(mode.equals("usb")){
+            writeSelection.addAll(VehicleWriter.selectionGroup(key));vehicleReview=null;
+            if(vehicleSelectionText!=null)vehicleSelectionText.setText(writeSelection.size()+" van 43 ontwerpvelden geselecteerd");
+            if(prepareVehicleButton!=null)prepareVehicleButton.setEnabled(reader!=null&&reader.canWrite()&&vehiclePending==null&&vehicleAccess==null&&!writerBusy&&!writeSelection.isEmpty());
+        }
+    }
+    private Button vehicleButton(LinearLayout parent,String title,boolean primary,Runnable action,boolean enabled){Button b=button(title,primary,action);b.setEnabled(enabled&&!writerBusy);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(50));lp.topMargin=dp(10);parent.addView(b,lp);return b;}
+    private void vehiclePanel(){
+        LinearLayout panel=card("Voertuig · vLinker USB","Preview: nog niet fysiek op een echte Twizy gevalideerd. Elke uitlezing, schrijf- of herstelactie vraagt jouw toestelgoedkeuring. Backups en journalen zijn versleuteld.");
+        boolean connected=mode.equals("usb")&&reader!=null&&reader.canWrite();
+        JSONObject status=vehiclePending!=null?vehiclePending:vehicleAccess;
+        kv(panel,"Status",writerBusy?"Voertuigactie bezig":status==null?(connected?"Verbind N, GO uit, rem ingedrukt":"Verbind vLinker USB"):status.optString("phase"));
+        if(status!=null&&status.has("error"))panel.addView(text(status.optString("error"),12,RED,false));
+        vehicleButton(panel,"75 instellingen uitlezen",false,()->vehicleAction("Beschermde instellingen uitlezen",c->vehicleWriter.snapshot(c),r->{scan=r;identity=r.optJSONObject("identity");showPage(1);toast("75 instellingen opgeslagen en uitloggen bevestigd.");}),connected&&status==null);
+        vehicleButton(panel,"Te schrijven instellingen kiezen",false,this::chooseWriteSelection,connected&&status==null);
+        vehicleSelectionText=text(writeSelection.size()+" van 43 ontwerpvelden geselecteerd",12,LIME,false);panel.addView(vehicleSelectionText);
+        CheckBox drivetrain=new CheckBox(this);drivetrain.setText("Originele motor en reductiekast bevestigd");drivetrain.setTextColor(TEXT);panel.addView(drivetrain);
+        CheckBox faults=new CheckBox(this);faults.setText("Voertuigstoringen, ook SERV, zijn opgelost");faults.setTextColor(TEXT);panel.addView(faults);
+        CheckBox lights=new CheckBox(this);lights.setText("Aangepaste remlichthardware aanwezig");lights.setTextColor(TEXT);panel.addView(lights);
+        drivetrain.setEnabled(!writerBusy);faults.setEnabled(!writerBusy);lights.setEnabled(!writerBusy);
+        prepareVehicleButton=vehicleButton(panel,"Voertuigplan voorbereiden",true,()->{
+            JSONObject values=Model.copy(draft);Set<String> chosen=new HashSet<>(writeSelection);boolean stock=drivetrain.isChecked(),resolved=faults.isChecked(),brakes=lights.isChecked();
+            vehicleAction("Voertuigplan voorbereiden",c->vehicleWriter.prepare(c,values,chosen,stock,brakes,resolved),r->showVehicleReview(r,false));
+        },connected&&status==null&&!writeSelection.isEmpty());
+        if(vehicleAccess!=null&&vehiclePending==null)vehicleButton(panel,"Onderbroken toegangssessie afsluiten",false,()->vehicleAction("Toegangssessie afsluiten",c->{vehicleWriter.closeAccess(c);return new JSONObject();},r->{showPage(2);toast("Uitloggen bevestigd.");}),connected&&!vehicleAccess.optString("phase").equals("corrupt"));
+        if(vehiclePending!=null){
+            String transaction=vehiclePending.optString("id");
+            vehicleButton(panel,"Herstelplan bekijken",false,()->vehicleAction("Originele waarden vergelijken",c->vehicleWriter.reviewRestore(c,transaction),r->showVehicleReview(r,true)),connected&&!vehiclePending.optString("phase").equals("corrupt"));
+            vehicleButton(panel,"Voertuigbackup exporteren",false,()->export(vehiclePending.toString(),"twizy-voertuigbackup.json","application/json"),!writerBusy&&vehiclePending.has("rows"));
+            if(vehiclePending.optString("phase").equals("awaiting-contact-cycle")){
+                panel.addView(text(vehiclePending.optBoolean("cycle_off_seen")?"Contact UIT waargenomen. Zet weer AAN, N, GO uit en houd de rem ingedrukt; controleer daarna.":"Laat de adapter aangesloten. Zet contact UIT en wacht tot dit is waargenomen; zet daarna weer AAN.",12,LIME,false));
+                vehicleButton(panel,"Na contactcyclus controleren",true,()->vehicleAction("Contactcyclus controleren",c->vehicleWriter.verifyCycle(c,transaction),r->{showPage(2);toast("Alle voertuigwaarden na contactcyclus bevestigd.");}),connected&&vehiclePending.optBoolean("cycle_off_seen"));
+            }
+        }
+    }
+    private void chooseWriteSelection(){
+        JSONArray parameters=model.parameters(selectedModel());String[] labels=new String[parameters.length()];boolean[] chosen=new boolean[labels.length];
+        for(int i=0;i<labels.length;i++){JSONObject p=parameters.optJSONObject(i);labels[i]=p.optString("name");chosen[i]=writeSelection.contains(p.optString("key"));}
+        new AlertDialog.Builder(this).setTitle("Te schrijven instellingen").setMultiChoiceItems(labels,chosen,(dialog,index,on)->{
+            String key=parameters.optJSONObject(index).optString("key");Set<String> group=VehicleWriter.selectionGroup(key);
+            for(int i=0;i<labels.length;i++)if(group.contains(parameters.optJSONObject(i).optString("key"))){chosen[i]=on;((AlertDialog)dialog).getListView().setItemChecked(i,on);}
+        }).setPositiveButton("Selectie bewaren",(d,w)->{writeSelection.clear();for(int i=0;i<labels.length;i++)if(chosen[i])writeSelection.add(parameters.optJSONObject(i).optString("key"));vehicleReview=null;showPage(2);}).setNeutralButton("Alles kiezen",(d,w)->{writeSelection.clear();for(int i=0;i<labels.length;i++)writeSelection.add(parameters.optJSONObject(i).optString("key"));vehicleReview=null;showPage(2);}).setNegativeButton("Annuleer",null).show();
+    }
+    private void showVehicleReview(JSONObject reviewed,boolean restore){
+        vehicleReview=Model.copy(reviewed);JSONObject frozen=Model.copy(reviewed);StringBuilder rows=new StringBuilder();JSONArray changes=frozen.optJSONArray("changes");
+        for(int i=0;i<changes.length();i++){JSONObject r=changes.optJSONObject(i);rows.append(r.optString("address")).append("  ").append(r.opt("before")).append(" → ").append(r.opt("raw")).append("\n");}
+        showPage(2);
+        new AlertDialog.Builder(this).setTitle(restore?"Originele waarden herstellen":"Controleer het voertuigplan").setMessage(changes.length()+" gewijzigde registers · maximaal 120 seconden geldig.\n\n"+rows+"\nAlle beginwaarden en veiligheidscontroles worden opnieuw gecontroleerd. Na uitvoering volgt een echte contactcyclus.").setNegativeButton("Annuleer",(d,w)->vehicleReview=null).setPositiveButton("Goedkeuren…",(d,w)->{
+            try{
+                if(vehicleReview==null||!vehicleReview.optString("review_hash").equals(frozen.optString("review_hash")))throw new IllegalStateException("Plan gewijzigd; maak een nieuwe vergelijking.");
+                vehicleReview=null;String key=frozen.optString("id"),hash=frozen.optString("review_hash");
+                vehicleAction(restore?"Dit herstelplan uitvoeren":"Dit plan naar de Twizy schrijven",c->restore?vehicleWriter.restore(c,key,hash):vehicleWriter.apply(c,key,hash),r->{showPage(2);toast("Read-back geslaagd. Contactcyclus en hercontrole staan nog open.");});
+            }catch(Exception e){error(e);}
+        }).show();
     }
     private void renderParameters(LinearLayout groups,String query){groups.removeAllViews();JSONArray params=model.parameters(selectedModel());String last="";query=query.toLowerCase(Locale.ROOT);
         for(int i=0;i<params.length();i++){JSONObject p=params.optJSONObject(i);String key=p.optString("key"),group=p.optString("group");if(!(p.optString("name")+group).toLowerCase(Locale.ROOT).contains(query))continue;
@@ -141,11 +228,11 @@ public final class MainActivity extends Activity implements LocationListener {
             LinearLayout box=column();box.setPadding(dp(16),dp(14),dp(16),dp(12));box.setBackground(background(CARD,15));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(8);groups.addView(box,lp);
             TextView label=text(p.optString("name"),14,TEXT,true);box.addView(label);
             LinearLayout r=row();r.setGravity(Gravity.CENTER_VERTICAL);SeekBar slider=new SeekBar(this);slider.setMin(p.optInt("min"));slider.setMax(p.optInt("max"));slider.setProgress(draft.optInt(key));r.addView(slider,new LinearLayout.LayoutParams(0,dp(44),1));
-            EditText value=input("",Integer.toString(draft.optInt(key)));value.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);value.setTextSize(15);value.setGravity(Gravity.CENTER);r.addView(value,new LinearLayout.LayoutParams(dp(66),dp(48)));r.addView(text(" "+p.optString("unit"),11,MUTED,false));box.addView(r);
+            EditText value=input("",Integer.toString(draft.optInt(key)));value.setTag("parameter-"+key);value.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);value.setTextSize(15);value.setGravity(Gravity.CENTER);r.addView(value,new LinearLayout.LayoutParams(dp(66),dp(48)));r.addView(text(" "+p.optString("unit"),11,MUTED,false));box.addView(r);
             box.addView(text(p.optInt("min")+"–"+p.optInt("max")+" "+p.optString("unit")+"  ·  "+(p.optString("mapping").equals("sdo")?"SDO-referentie":"Ontwerpveld"),10,MUTED,false));
             label.setOnClickListener(v->message(p.optString("name"),p.optString("note")));
-            slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar s,int v,boolean fromUser){if(fromUser){put(draft,key,v);value.setText(Integer.toString(v));}}public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){}});
-            value.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){try{int n=Integer.parseInt(s.toString());put(draft,key,n);if(n>=p.optInt("min")&&n<=p.optInt("max")){slider.setProgress(n);value.setTextColor(TEXT);}else value.setTextColor(RED);}catch(NumberFormatException e){put(draft,key,JSONObject.NULL);value.setTextColor(RED);}}public void afterTextChanged(Editable e){}});
+            slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar s,int v,boolean fromUser){if(fromUser){put(draft,key,v);selectWriteField(key);value.setText(Integer.toString(v));}}public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){}});
+            value.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int c,int f){}public void onTextChanged(CharSequence s,int a,int b,int c){try{int n=Integer.parseInt(s.toString());put(draft,key,n);selectWriteField(key);if(n>=p.optInt("min")&&n<=p.optInt("max")){slider.setProgress(n);value.setTextColor(TEXT);}else value.setTextColor(RED);}catch(NumberFormatException e){put(draft,key,JSONObject.NULL);value.setTextColor(RED);}}public void afterTextChanged(Editable e){}});
         }
     }
     private String selectedModel(){return mode.equals("usb")?Model.modelOf(identity):config.optString("model");}
@@ -201,31 +288,32 @@ public final class MainActivity extends Activity implements LocationListener {
         if(laps.length()>0){LinearLayout lc=card("Huidige rondes","Handmatige markeringen, geen transpondertijden.");for(int i=0;i<laps.length();i++)kv(lc,"Ronde "+(i+1),duration(laps.optJSONObject(i).optLong("duration_ms")));}
         JSONArray sessions=config.optJSONArray("sessions");for(int i=sessions.length()-1;i>=0;i--){final int index=i;JSONObject s=sessions.optJSONObject(i);LinearLayout sc=card(s.optString("name"),s.optString("mode")+" · "+s.optString("at"));kv(sc,"Metingen",Integer.toString(s.optJSONArray("samples").length()));JSONArray ls=s.optJSONArray("laps");for(int j=0;j<ls.length();j++)kv(sc,"Ronde "+(j+1),duration(ls.optJSONObject(j).optLong("duration_ms")));addButton(sc,"Telemetrie als CSV",false,()->export(sessionCsv(s),"twizy-sessie.csv","text/csv"));addButton(sc,"Volledig sessierapport",false,()->export(s.toString(),"twizy-sessie.json","application/json"));addButton(sc,"Verwijder sessie…",false,()->confirmDelete("Sessie verwijderen",()->{JSONObject next=Model.copy(config);next.optJSONArray("sessions").remove(index);approve("Sessie verwijderen",next,()->showPage(3));}));}
     }
-    private void startRecording(){if(recording||samples.length()>0)throw new IllegalStateException("Bewaar eerst de huidige opname.");if(mode.equals("offline"))throw new IllegalStateException("Geen actuele gegevensbron.");if(config.optJSONArray("sessions").length()>=12)throw new IllegalStateException("Maximaal 12 sessies. Exporteer en verwijder eerst een oude sessie.");EditText name=input("Sessienaam","Circuit · stint "+(config.optJSONArray("sessions").length()+1));new AlertDialog.Builder(this).setTitle("Sessie starten").setView(name).setNegativeButton("Annuleer",null).setPositiveButton("Goedkeuren…",(d,w)->approve("Sessieopname toestaan",Model.copy(config),()->{recording=true;recordName=name.getText().toString();recordMode=mode;recordStart=lastLap=SystemClock.elapsedRealtime();samples=new JSONArray();laps=new JSONArray();showPage(3);})).show();}
+    private void startRecording(){if(writerBusy||vehiclePending!=null||vehicleAccess!=null)throw new IllegalStateException("Rond eerst de voertuigprocedure af.");if(recording||samples.length()>0)throw new IllegalStateException("Bewaar eerst de huidige opname.");if(mode.equals("offline"))throw new IllegalStateException("Geen actuele gegevensbron.");if(config.optJSONArray("sessions").length()>=12)throw new IllegalStateException("Maximaal 12 sessies. Exporteer en verwijder eerst een oude sessie.");EditText name=input("Sessienaam","Circuit · stint "+(config.optJSONArray("sessions").length()+1));new AlertDialog.Builder(this).setTitle("Sessie starten").setView(name).setNegativeButton("Annuleer",null).setPositiveButton("Goedkeuren…",(d,w)->approve("Sessieopname toestaan",Model.copy(config),()->{recording=true;recordName=name.getText().toString();recordMode=mode;recordStart=lastLap=SystemClock.elapsedRealtime();samples=new JSONArray();laps=new JSONArray();showPage(3);})).show();}
     private void markLap(){if(!recording)throw new IllegalStateException("Start eerst een opname.");long now=SystemClock.elapsedRealtime();JSONObject lap=new JSONObject();put(lap,"duration_ms",now-lastLap);put(lap,"elapsed_ms",now-recordStart);put(lap,"at",Model.now());put(lap,"source","manual");laps.put(lap);lastLap=now;haptic();showPage(3);}
     private void stopRecording(){if(samples.length()==0)throw new IllegalStateException("Nog geen metingen om te bewaren.");recording=false;JSONObject session=new JSONObject();put(session,"name",recordName);put(session,"mode",recordMode);put(session,"at",Model.now());put(session,"samples",samples);put(session,"laps",laps);put(session,"identity",Model.copy(identity));put(session,"model",selectedModel());put(session,"software",selectedSoftware());put(session,"values",Model.copy(config.optJSONObject("values")));JSONObject next=Model.copy(config);next.optJSONArray("sessions").put(session);approve("Sessie bewaren: "+recordName,next,()->{samples=new JSONArray();laps=new JSONArray();showPage(3);});}
     private String sessionCsv(JSONObject session){String[] keys={"at","source","speed","rpm","power","soc","voltage","current","motor_temp","controller_temp","aux","gps_lat","gps_lon","gps_speed","gps_accuracy"};StringBuilder out=new StringBuilder(String.join(",",keys)+"\r\n");JSONArray rows=session.optJSONArray("samples");for(int i=0;i<rows.length();i++){JSONObject s=rows.optJSONObject(i);for(int j=0;j<keys.length;j++){if(j>0)out.append(',');String v=s.isNull(keys[j])?"":s.optString(keys[j],"");if(v.matches("^[=+@-].*")&&!v.matches("-?\\d+(\\.\\d+)?"))v="'"+v;out.append(Model.csv(v));}out.append("\r\n");}return out.toString();}
     private static String duration(long ms){return String.format(Locale.ROOT,"%02d:%02d.%03d",ms/60000,(ms/1000)%60,ms%1000);}
     private void garage(){
-        title("GARAGE / EIGENAAR","Jouw pit. Jouw toestemming.","Android 0.3.1 · lokaal, ondertekend en zonder automatische updates.");
+        title("GARAGE / EIGENAAR","Jouw pit. Jouw toestemming.","Android 0.4.0-preview · lokaal, ondertekend en zonder automatische updates.");
         LinearLayout secure=card("Eigenaarsbeveiliging","Iedere opgeslagen wijziging vraagt Android-biometrie of je toestelcode. Iedere nieuwe handeling krijgt een eigen, eenmalige cryptografische goedkeuring.");
-        kv(secure,"Toestelvergrendeling",getSystemService(KeyguardManager.class).isDeviceSecure()?"Actief":"Niet ingesteld · wijzigingen geblokkeerd");kv(secure,"Opslag","AES-256-GCM / Android Keystore");kv(secure,"Schermopname","Geblokkeerd");kv(secure,"Cloudback-up","Uitgeschakeld");kv(secure,"Voertuigschrijven","Ontbreekt in deze release");
+        kv(secure,"Toestelvergrendeling",getSystemService(KeyguardManager.class).isDeviceSecure()?"Actief":"Niet ingesteld · wijzigingen geblokkeerd");kv(secure,"Opslag","AES-256-GCM / Android Keystore");kv(secure,"Schermopname","Geblokkeerd");kv(secure,"Cloudback-up","Uitgeschakeld");kv(secure,"Voertuigschrijven","vLinker USB · per actie goedkeuren");
         addButton(secure,"Controleer eigenaarsbevestiging",true,()->approve("Eigenaarsbeveiliging gecontroleerd",Model.copy(config),()->message("Bevestigd","Je toestemming is met een Android Keystore-sleutel gecontroleerd en in het logboek vastgelegd.")));
         LinearLayout hardware=card("Hardware","vLinker FS of M5 PitBridge via USB-C/OTG; laptop via lokale wifi. USB-drivers zijn ingebouwd. Hardwarevalidatie is nog nodig.");addButton(hardware,"Verbinding kiezen",true,()->showConnection());
         LinearLayout simulation=card("Simulator","Model- en firmwarewissels passen alleen de lokale demo aan.");addButton(simulation,"Model: Twizy "+selectedModel(),false,()->choose("Demomodel",new String[]{"Twizy 45","Twizy 80"},n->changeScenario(n==0?"45":"80",selectedSoftware())));addButton(simulation,"Firmware: "+selectedSoftware(),false,()->choose("Firmware",new String[]{"0712.0001","0712.0002","0712.0003","9999.9999"},n->changeScenario(selectedModel(),new String[]{"0712.0001","0712.0002","0712.0003","9999.9999"}[n])));
         addButton(simulation,"Foutscenario: "+config.optString("fault"),false,()->choose("Gesimuleerde storing",new String[]{"Geen storing","SERV","12 V te laag","Motor te warm","Read-back-fout"},n->{if(!mode.equals("demo")||recording)throw new IllegalStateException("Alleen wijzigen in demo zonder opname.");JSONObject next=Model.copy(config);put(next,"fault",new String[]{"none","serv","12v","thermal","writefail"}[n]);approve("Demo-foutscenario wijzigen",next,()->showPage(5));}));
         LinearLayout pref=card("Pitinstellingen",null);addButton(pref,"Scherm aanhouden: "+(config.optBoolean("keep_awake")?"aan":"uit"),false,()->togglePreference("keep_awake","Scherminstelling wijzigen"));addButton(pref,"Trilsignalen: "+(config.optBoolean("haptics")?"aan":"uit"),false,()->togglePreference("haptics","Trilsignalen wijzigen"));addButton(pref,"GPS: "+(gpsOn?"aan":"uit"),false,()->toggleGps());
         LinearLayout audit=card("Goedkeuringslogboek","Laatste 200 bevestigde handelingen in de versleutelde kluis.");JSONArray log=config.optJSONArray("audit");for(int i=log.length()-1;i>=Math.max(0,log.length()-8);i--){JSONObject a=log.optJSONObject(i);kv(audit,a.optString("action"),a.optString("at"));}addButton(audit,"Logboek exporteren",false,()->export(config.optJSONArray("audit").toString(),"twizy-goedkeuringen.json","application/json"));
-        LinearLayout about=card("Over deze release","Een native Android-app met eigen opslag en USB-uitleesstack. Geen live tuning, firmwareflash of automatische GPS-rondedetectie. Een gewijzigde motor/reductiekast kan niet alleen uit een controller-ID worden afgeleid.");
+        LinearLayout about=card("Over deze release","Een native Android-app met eigen opslag en USB-uitleesstack. vLinker-tuning via bekeken plannen; M5 blijft alleen uitlezen. Geen firmwareflash of automatische GPS-rondedetectie. Een gewijzigde motor/reductiekast kan niet alleen uit een controller-ID worden afgeleid.");
         addButton(about,"Beveiliging en bronnen",false,()->message("Beveiliging & bronnen","Eigen toestelcode = eigenaarsbewijs. Iedereen met een geregistreerde vingerafdruk of jouw toestelcode kan bevestigen. Een rooted toestel of beheerder valt buiten deze bescherming.\n\nExports zijn gewone leesbare bestanden op een door jou gekozen locatie.\n\nAndroid Keystore / BiometricPrompt: developer.android.com\nUSB Serial 3.10.0 (MIT): github.com/mik3y/usb-serial-for-android\nTwizy-referenties (MIT): github.com/openvehicles/Open-Vehicle-Monitoring-System-3\n\nDe laptopviewer gebruikt HTTP: kies je eigen hotspot of vertrouwd wifi-netwerk. De APK stuurt geen bedieningsacties naar de laptop."));
     }
     private void togglePreference(String key,String action){JSONObject next=Model.copy(config);put(next,key,!next.optBoolean(key));approve(action,next,()->{awake();showPage(5);});}
-    private void changeScenario(String car,String firmware){if(recording||samples.length()>0||config.has("pending"))throw new IllegalStateException("Bewaar de opname en rond de demo-contactcyclus eerst af.");JSONObject next=Model.copy(config);put(next,"model",car);put(next,"software",firmware);put(next,"values",model.defaults(car));put(next,"fault","none");approve("Demo wijzigen naar Twizy "+car+" / "+firmware,next,()->{disconnect();mode="demo";connectionNote="Zelfstandige simulator";demoRunning=false;draft=Model.copy(config.optJSONObject("values"));scan=null;showPage(5);});}
+    private void changeScenario(String car,String firmware){if(writerBusy||ioBusy)throw new IllegalStateException("Rond eerst de voertuigactie af.");if(recording||samples.length()>0||config.has("pending"))throw new IllegalStateException("Bewaar de opname en rond de demo-contactcyclus eerst af.");JSONObject next=Model.copy(config);put(next,"model",car);put(next,"software",firmware);put(next,"values",model.defaults(car));put(next,"fault","none");approve("Demo wijzigen naar Twizy "+car+" / "+firmware,next,()->{disconnect();mode="demo";connectionNote="Zelfstandige simulator";demoRunning=false;draft=Model.copy(config.optJSONObject("values"));scan=null;showPage(5);});}
     private interface Choice {void accept(int n);}
     private void choose(String title,String[] options,Choice action){new AlertDialog.Builder(this).setTitle(title).setItems(options,(d,n)->{try{action.accept(n);}catch(Exception e){error(e);}}).setNegativeButton("Annuleer",null).show();}
     private void confirmDelete(String title,Runnable action){new AlertDialog.Builder(this).setTitle(title).setMessage("Deze lokale kopie verwijderen? Exporteer eerst als je die wilt bewaren.").setNegativeButton("Annuleer",null).setPositiveButton("Goedkeuren…",(d,n)->action.run()).show();}
 
     private void approve(String action,JSONObject proposed,Runnable success){
+        if(writerBusy){message("Voertuigactie bezig","Wacht tot de lopende voertuigactie is afgerond of verlaten van de app deze heeft onderbroken.");return;}
         if(authBusy)throw new IllegalStateException("Er wacht al een eigenaarsbevestiging.");
         if(!getSystemService(KeyguardManager.class).isDeviceSecure()){message("Toestelvergrendeling vereist","Stel eerst een privé-pincode, wachtwoord of biometrie in via Android-instellingen. Zonder vergrendeling blijven wijzigingen geblokkeerd.");return;}
         try{
@@ -245,22 +333,22 @@ public final class MainActivity extends Activity implements LocationListener {
             });
         }catch(Exception e){authBusy=false;authCancel=null;error(e);}
     }
-    private void runScan(){if(ioBusy)throw new IllegalStateException("Een uitlezing is nog bezig.");
+    private void runScan(){if(ioBusy||writerBusy)throw new IllegalStateException("Een uitlezing is nog bezig.");
         if(mode.equals("demo")){JSONObject r=new JSONObject();put(r,"at",Model.now());put(r,"mode","demo");put(r,"identity",demoIdentity());put(r,"complete",true);put(r,"scope","Gesimuleerde diagnose. Geen voertuiggegevens.");JSONArray rows=new JSONArray();JSONObject row=new JSONObject();put(row,"address","1001:00");put(row,"width",1);put(row,"raw",config.optString("fault").equals("none")?0:1);rows.put(row);put(r,"registers",rows);put(r,"errors",new JSONArray());scan=r;showPage(1);return;}
         if(mode.equals("laptop")){message("Diagnose vanaf laptop","Voer de scan uit in de laptop-app. Het laatste rapport verschijnt daarna hier.");return;}
         if(reader==null)throw new IllegalStateException("Sluit eerst de USB-adapter aan.");CanReader active=reader;int version=generation;ioBusy=true;toast("Controller uitlezen…");worker.execute(()->{try{JSONObject result=active.diagnose();ui.post(()->{if(reader==active&&visible){scan=result;identity=result.optJSONObject("identity");showPage(1);}});}catch(Exception e){ui.post(()->error(e));}finally{ui.post(()->ioBusy=false);}});
     }
     private JSONObject demoIdentity(){JSONObject id=new JSONObject();put(id,"product",selectedModel().equals("80")?0x0712302d:0x0712301b);put(id,"vendor",30);put(id,"revision",Model.revision(selectedSoftware()));put(id,"software",selectedSoftware());put(id,"hardware","DEMO-HW");put(id,"source","simulation");return id;}
     private void tick(){
-        if(config==null||content==null||authBusy)return;long now=SystemClock.elapsedRealtime();
+        if(config==null||content==null||authBusy||writerBusy)return;long now=SystemClock.elapsedRealtime();
         if(mode.equals("demo")){double t=(now-started)/1000.0;JSONObject values=config.optJSONObject("values");double speed=demoRunning?Math.max(0,Math.min(values.optInt("speed"),48+23*Math.sin(t/7)+8*Math.sin(t/2.7))):0;double power=demoRunning?(4.2+9*Math.sin(t/7+.7))*values.optInt("drive")/100.0:0;
             sample=new JSONObject();put(sample,"at",Model.now());put(sample,"source","simulation");put(sample,"speed",speed);put(sample,"power",power);put(sample,"rpm",speed*(selectedModel().equals("45")?5814.0/45:7250.0/80));put(sample,"soc",82.4-(t%1200)/150);put(sample,"voltage",54.5-Math.max(0,power)*.12);put(sample,"current",power*1000/sample.optDouble("voltage"));put(sample,"aux",config.optString("fault").equals("12v")?10.8:12.7);put(sample,"motor_temp",config.optString("fault").equals("thermal")?125:43+(demoRunning?6*Math.sin(t/40):0));put(sample,"controller_temp",35);identity=demoIdentity();
         }else if(!ioBusy&&(reader!=null||laptop!=null)){
             ioBusy=true;final CanReader activeReader=reader;final LaptopLink activeLaptop=laptop;
             worker.execute(()->{try{
-                JSONObject result=activeReader!=null?activeReader.sample():activeLaptop.state();
+                JSONObject result=activeReader!=null?(vehicleWriter.pending!=null&&vehicleWriter.pending.optString("phase").equals("awaiting-contact-cycle")&&activeReader.canWrite()?activeReader.pendingSample(vehicleWriter):activeReader.sample()):activeLaptop.state();final JSONObject pendingStatus=vehicleWriter.status(),accessStatus=vehicleWriter.accessStatus();
                 ui.post(()->{if(!visible||reader!=activeReader||laptop!=activeLaptop)return;
-                    if(activeReader!=null)sample=result;else {String previousIdentity=identity.toString(),previousNote=connectionNote,previousScan=scan==null?"":scan.optString("at");sample=result.optJSONObject("sample");put(sample,"source",result.optString("mode").equals("demo")?"laptop-demo":"laptop-live");identity=result.optJSONObject("identity");JSONObject report=result.optJSONObject("scan");if(report!=null)scan=report;connectionNote="Laptop: "+(result.optString("mode").equals("demo")?"DEMO":"LIVE UITLEZEN");if((page==0&&(!identity.toString().equals(previousIdentity)||!connectionNote.equals(previousNote)))||(page==1&&scan!=null&&!scan.optString("at").equals(previousScan)))showPage(page);}
+                    boolean offChanged=(vehiclePending!=null&&vehiclePending.optBoolean("cycle_off_seen"))!=(pendingStatus!=null&&pendingStatus.optBoolean("cycle_off_seen"));vehiclePending=pendingStatus;vehicleAccess=accessStatus;if(page==2&&offChanged)showPage(2);if(activeReader!=null)sample=result;else {String previousIdentity=identity.toString(),previousNote=connectionNote,previousScan=scan==null?"":scan.optString("at");sample=result.optJSONObject("sample");put(sample,"source",result.optString("mode").equals("demo")?"laptop-demo":"laptop-live");identity=result.optJSONObject("identity");JSONObject report=result.optJSONObject("scan");if(report!=null)scan=report;connectionNote="Laptop: "+(result.optString("mode").equals("demo")?"DEMO":"LIVE UITLEZEN");if((page==0&&(!identity.toString().equals(previousIdentity)||!connectionNote.equals(previousNote)))||(page==1&&scan!=null&&!scan.optString("at").equals(previousScan)))showPage(page);}
                     liveSampleAt=SystemClock.elapsedRealtime();if(activeLaptop!=null&&sample.optDouble("age",0)>=6)liveSampleAt=0;updateMetrics();
                 });
             }catch(Exception e){ui.post(()->{if(reader==activeReader&&laptop==activeLaptop){connectionNote="Verbinding verloren";disconnect();mode="offline";liveSampleAt=0;sample=new JSONObject();recording=false;showPage(page);toast(safeError(e));}});}finally{ui.post(()->ioBusy=false);}});
@@ -270,7 +358,7 @@ public final class MainActivity extends Activity implements LocationListener {
         if(recording&&valid&&now-lastSampleAt>=1000){JSONObject record=Model.copy(sample);put(record,"captured_at",Model.now());if(gpsOn&&gps!=null&&SystemClock.elapsedRealtimeNanos()-gps.getElapsedRealtimeNanos()<8000000000L){put(record,"gps_lat",gps.getLatitude());put(record,"gps_lon",gps.getLongitude());put(record,"gps_speed",gps.hasSpeed()?gps.getSpeed()*3.6:JSONObject.NULL);put(record,"gps_accuracy",gps.getAccuracy());}samples.put(record);lastSampleAt=now;if(samples.length()>=3600){recording=false;toast("Opnamelimiet bereikt. Bewaar je sessie.");}}
         updateMetrics();
     }
-    private void showConnection(){if(recording||samples.length()>0)throw new IllegalStateException("Bewaar eerst de opname vóór je de gegevensbron wijzigt.");choose("Jouw pitverbinding",new String[]{"Zelfstandige demo","vLinker FS · USB-C/OTG","M5 PitBridge · USB-C/OTG","Laptop · wifi-kijktoegang","Verbinding sluiten"},n->{if(n==0){approve("Overschakelen naar demo",Model.copy(config),()->{disconnect();mode="demo";connectionNote="Zelfstandige simulator";scan=null;showPage(0);});}else if(n==1||n==2)chooseUsb(n==2);else if(n==3)connectLaptop();else approve("Verbinding sluiten",Model.copy(config),()->{disconnect();mode="offline";connectionNote="Niet verbonden";showPage(0);});});}
+    private void showConnection(){if(writerBusy||ioBusy||authBusy)throw new IllegalStateException("Rond eerst de lopende uitlezing of voertuigactie af.");if(recording||samples.length()>0)throw new IllegalStateException("Bewaar eerst de opname vóór je de gegevensbron wijzigt.");choose("Jouw pitverbinding",new String[]{"Zelfstandige demo","vLinker FS · USB-C/OTG","M5 PitBridge · USB-C/OTG","Laptop · wifi-kijktoegang","Verbinding sluiten"},n->{if(n==0){approve("Overschakelen naar demo",Model.copy(config),()->{disconnect();mode="demo";connectionNote="Zelfstandige simulator";scan=null;showPage(0);});}else if(n==1||n==2)chooseUsb(n==2);else if(n==3)connectLaptop();else approve("Verbinding sluiten",Model.copy(config),()->{disconnect();mode="offline";connectionNote="Niet verbonden";showPage(0);});});}
     private void chooseUsb(boolean m5){UsbManager manager=getSystemService(UsbManager.class);List<UsbSerialDriver> devices=UsbSerialProber.getDefaultProber().findAllDrivers(manager);if(devices.isEmpty()){message("Geen USB-adapter gevonden","Sluit de adapter aan via een USB-C/OTG-datakabel. vLinker FS is USB, geen Bluetooth-adapter. Kies voor M5 de PitBridge-firmware uit dit project.");return;}
         String[] labels=new String[devices.size()];for(int i=0;i<labels.length;i++){UsbDevice d=devices.get(i).getDevice();labels[i]=String.format(Locale.ROOT,"%s · %04X:%04X",d.getProductName()==null?"USB-serieel":d.getProductName(),d.getVendorId(),d.getProductId());}
         choose("Kies USB-adapter",labels,n->approve("USB-controller alleen uitlezen",Model.copy(config),()->{pendingUsb=devices.get(n);pendingM5=m5;if(manager.hasPermission(pendingUsb.getDevice()))openUsb();else {Intent intent=new Intent(USB_PERMISSION).setPackage(getPackageName());PendingIntent permission=PendingIntent.getBroadcast(this,0,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);manager.requestPermission(pendingUsb.getDevice(),permission);}}));
@@ -279,10 +367,10 @@ public final class MainActivity extends Activity implements LocationListener {
     private boolean receiverRegistered;
     private void setupUsbReceiver(){if(Build.VERSION.SDK_INT>=33)registerReceiver(usbReceiver,new IntentFilter(USB_PERMISSION),Context.RECEIVER_NOT_EXPORTED);else registerReceiver(usbReceiver,new IntentFilter(USB_PERMISSION));receiverRegistered=true;}
     private void openUsb(){UsbSerialDriver driver=pendingUsb;boolean m5=pendingM5;pendingUsb=null;if(driver==null||!visible)return;disconnect();final int epoch=linkEpoch;ioBusy=true;connectionNote="USB verbinden…";toast(connectionNote);
-        worker.execute(()->{CanReader opened=null;try{UsbDeviceConnection connection=getSystemService(UsbManager.class).openDevice(driver.getDevice());if(connection==null)throw new IOException("USB openen mislukt.");UsbSerialPort port=driver.getPorts().get(0);try{port.open(connection);port.setParameters(115200,8,UsbSerialPort.STOPBITS_1,UsbSerialPort.PARITY_NONE);}catch(Exception e){try{port.close();}catch(Exception ignored){}connection.close();throw e;}opened=new CanReader(port,m5,model);opened.initialize();JSONObject id=opened.identity();final CanReader ready=opened;ui.post(()->{if(!visible||linkEpoch!=epoch){try{ready.close();}catch(Exception ignored){}return;}reader=ready;identity=id;mode="usb";if(!Model.modelOf(id).equals("?"))draft=model.defaults(Model.modelOf(id));connectionNote=m5?"M5 PitBridge · READONLY":"vLinker FS · READONLY";sample=new JSONObject();liveSampleAt=0;scan=null;showPage(1);});}catch(Exception e){if(opened!=null)try{opened.close();}catch(Exception ignored){}ui.post(()->{if(linkEpoch==epoch&&visible){mode="offline";connectionNote="USB niet verbonden";error(e);showPage(0);}});}finally{ui.post(()->{if(linkEpoch==epoch)ioBusy=false;});}});
+        worker.execute(()->{CanReader opened=null;try{UsbDeviceConnection connection=getSystemService(UsbManager.class).openDevice(driver.getDevice());if(connection==null)throw new IOException("USB openen mislukt.");UsbSerialPort port=driver.getPorts().get(0);try{port.open(connection);port.setParameters(115200,8,UsbSerialPort.STOPBITS_1,UsbSerialPort.PARITY_NONE);}catch(Exception e){try{port.close();}catch(Exception ignored){}connection.close();throw e;}opened=new CanReader(port,m5,model);opened.initialize();JSONObject id=opened.identity();final CanReader ready=opened;ui.post(()->{if(!visible||linkEpoch!=epoch){try{ready.close();}catch(Exception ignored){}return;}reader=ready;identity=id;mode="usb";if(!Model.modelOf(id).equals("?"))draft=model.defaults(Model.modelOf(id));connectionNote=m5?"M5 PitBridge · READONLY":"vLinker FS · schrijven via plan";sample=new JSONObject();liveSampleAt=0;scan=null;showPage(1);});}catch(Exception e){if(opened!=null)try{opened.close();}catch(Exception ignored){}ui.post(()->{if(linkEpoch==epoch&&visible){mode="offline";connectionNote="USB niet verbonden";error(e);showPage(0);}});}finally{ui.post(()->{if(linkEpoch==epoch)ioBusy=false;});}});
     }
     private void connectLaptop(){EditText url=input("http://192.168.…:8765/?viewer=…","");url.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);new AlertDialog.Builder(this).setTitle("Koppel de laptop").setMessage("Plak de telefoonviewerlink uit Hardware in de laptop-app. Gebruik je eigen hotspot of vertrouwd wifi: deze verbinding gebruikt HTTP en krijgt alleen kijktoegang.").setView(url).setNegativeButton("Annuleer",null).setPositiveButton("Goedkeuren…",(d,w)->{try{LaptopLink candidate=new LaptopLink(url.getText().toString());approve("Laptopviewer verbinden",Model.copy(config),()->{disconnect();laptop=candidate;mode="laptop";connectionNote="Laptop verbinden…";scan=null;showPage(0);});}catch(Exception e){error(e);}}).show();}
-    private void disconnect(){linkEpoch++;CanReader old=reader;reader=null;laptop=null;liveSampleAt=0;sample=new JSONObject();demoRunning=false;ioBusy=false;if(old!=null)worker.execute(()->{try{old.close();}catch(Exception ignored){}});}
+    private void disconnect(){if(writerCancellation!=null)writerCancellation.set(true);vehicleReview=null;writeSelection.clear();linkEpoch++;CanReader old=reader;reader=null;laptop=null;liveSampleAt=0;sample=new JSONObject();demoRunning=false;ioBusy=false;if(old!=null)worker.execute(()->{vehicleWriter.invalidate();try{old.close();}catch(Exception ignored){}});}
     private void toggleGps(){approve(gpsOn?"GPS uitschakelen":"GPS tijdens gebruik toestaan",Model.copy(config),()->{if(gpsOn){gpsOn=false;locations.removeUpdates(this);gps=null;showPage(page);}else if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},44);else enableGps();});}
     private void enableGps(){try{if(!locations.isProviderEnabled(LocationManager.GPS_PROVIDER)){message("GPS staat uit","Schakel locatie in via Android-instellingen.");return;}locations.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000,0,this);gpsOn=true;showPage(page);}catch(SecurityException e){error(e);}}
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==44&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)enableGps();else if(request==44)toast("Nauwkeurige GPS-toestemming ontbreekt.");}

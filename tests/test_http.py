@@ -61,6 +61,16 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status,200);self.assertIn(b"Twizy Pit Pro",data)
         status,data=self.request("GET","/api/bootstrap")
         self.assertEqual(status,200);self.assertTrue(json.loads(data)["local"])
+    def test_android_download_prefers_new_preview_and_falls_back_to_previous_apk(self):
+        with tempfile.TemporaryDirectory() as directory, patch("app.ROOT", Path(directory)):
+            release = Path(directory) / "releases" / "android"
+            release.mkdir(parents=True)
+            for name, content in (("TwizyPitPro-0.3.1.apk", b"old-apk"), ("TwizyPitPro-0.4.0-preview.apk", b"new-apk")):
+                (release / name).write_bytes(content)
+                status, data = self.request("GET", "/api/bootstrap")
+                self.assertEqual(status, 200)
+                self.assertEqual(json.loads(data)["android_apk_name"], name)
+                self.assertEqual(self.request("GET", "/api/download/android"), (200, content))
     def test_host_rebinding_rejected(self):
         status,_=self.request("GET","/api/bootstrap",headers={"Host":"attacker.example"})
         self.assertEqual(status,403)

@@ -1,5 +1,5 @@
 """Standalone Android SDK build. No global installation and no embedded signing secret."""
-import argparse, hashlib, json, os, pathlib, shutil, subprocess, urllib.request, zipfile
+import argparse, hashlib, json, os, pathlib, shutil, subprocess, urllib.request, zipfile, xml.etree.ElementTree as ET
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 TOOLS=pathlib.Path(os.environ.get('PIT_ANDROID_TOOLS', str(ROOT/'android-tools')))
 ANDROID=ROOT/'android'
@@ -50,7 +50,9 @@ def main():
     signing=pathlib.Path(os.environ.get('PIT_ANDROID_SIGNING', str(ROOT/'android-signing')));keystore=signing/'owner-release.p12'
     if not keystore.exists():raise RuntimeError('Run Initialize-AndroidSigning.ps1 before signing.')
     if 'PIT_SIGNING_PASSWORD' not in os.environ:raise RuntimeError('Signing password must be supplied in environment by the owner wrapper.')
-    out=DIST/('TwizyPitPro-QA-DO-NOT-DISTRIBUTE.apk' if args.qa else 'TwizyPitPro-0.3.1.apk')
+    version=ET.parse(SRC/'AndroidManifest.xml').getroot().get('{http://schemas.android.com/apk/res/android}versionName')
+    if not version or not all(c.isalnum() or c in '.-' for c in version):raise RuntimeError('Invalid APK version name.')
+    out=DIST/('TwizyPitPro-QA-DO-NOT-DISTRIBUTE.apk' if args.qa else 'TwizyPitPro-'+version+'.apk')
     run([jdk/'bin/java.exe','-jar',bt/'lib/apksigner.jar','sign','--ks',keystore,'--ks-key-alias','twizypit-owner','--ks-pass','env:PIT_SIGNING_PASSWORD','--key-pass','env:PIT_SIGNING_PASSWORD','--v4-signing-enabled','false','--out',out,aligned])
     check=subprocess.check_output([str(jdk/'bin/java.exe'),'-jar',str(bt/'lib/apksigner.jar'),'verify','--verbose','--print-certs',str(out)],text=True)
     (DIST/(out.stem+'-signature.txt')).write_text(check,encoding='utf-8')

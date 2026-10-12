@@ -50,6 +50,18 @@ final class Vault {
         signature.initSign((PrivateKey)keys.getKey(OWNER_KEY,null));
         return signature;
     }
+    byte[] encryptVehicle(String name,JSONObject record) throws Exception {
+        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,keys.getKey(DATA_KEY,null));
+        cipher.updateAAD(("TwizyPitPro-vehicle-v1:"+name).getBytes(StandardCharsets.UTF_8));
+        byte[] encrypted=cipher.doFinal(record.toString().getBytes(StandardCharsets.UTF_8));
+        ByteArrayOutputStream out=new ByteArrayOutputStream();out.write(1);out.write(cipher.getIV());out.write(encrypted);return out.toByteArray();
+    }
+    JSONObject decryptVehicle(String name,byte[] bytes) throws Exception {
+        if(bytes.length<29||bytes[0]!=1)throw new SecurityException("Voertuigjournaal ongeldig.");
+        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.DECRYPT_MODE,keys.getKey(DATA_KEY,null),new GCMParameterSpec(128,bytes,1,12));
+        cipher.updateAAD(("TwizyPitPro-vehicle-v1:"+name).getBytes(StandardCharsets.UTF_8));
+        return new JSONObject(new String(cipher.doFinal(bytes,13,bytes.length-13),StandardCharsets.UTF_8));
+    }
     void commit(String payload, byte[] approval, byte[] nonce) throws Exception {
         Signature verify=Signature.getInstance("SHA256withECDSA");
         verify.initVerify(keys.getCertificate(OWNER_KEY).getPublicKey());

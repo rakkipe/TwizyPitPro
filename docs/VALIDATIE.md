@@ -1,11 +1,19 @@
-> Update 0.4.1-preview: 123 Python-tests en 26 Android-kerncontroles geslaagd. Zie [actuele status](STATUS-0.4.1.md). Onderstaande eerdere testregistraties blijven historisch.
+> Actueel: 141 Python-tests, 46 Android-kerncontroles en vijf Android-emulatortests geslaagd. Android 0.4.0-preview bevat de USB-schrijf- en herstelroute. Onderstaande eerdere testregistraties blijven historisch.
+
+## Android 0.4.0-preview — 12 oktober 2026
+
+- 46 JVM-kerncontroles op actuele broncode: alle vier model-/firmwarecombinaties, 75 getypeerde beginwaarden, geselecteerd schrijven, behouden voertuigwaarden, geordende mapwrites en commit, aparte herstelplannen, hash/verval/eenmalig gebruik, controllerwissel, foutinjecties, ontbrekende acknowledgements, annuleren en verse contact-UIT-waarneming. De echte CanReader ontvangt gefragmenteerde bytes van een nagebootste USB-poort.
+- Vijf instrumentatietests in een afzonderlijke Android 11-emulator: echte Keystore/AES-GCM, willekeurige ciphertext, corruptie en bestandsverwisseling, onderbroken AtomicFile-transactie, herstel na herstart met corrupte backup en automatische selectie/activering van de voorbereidingsknop na veldbewerking. De procedure bouwt en installeert actuele productiebron voordat ze test; fysieke telefoons worden geweigerd.
+- Definitieve APK gebouwd met SDK 35/Java 21 en APK-v3-signatuur geverifieerd. Certificaat SHA-256 gelijk aan officiële Android 0.3.1. Update vanaf die APK geslaagd in de emulator; de eerdere versleutelde goedkeuringshistorie bleef behouden.
+- 141 Python-regressietests geslaagd, inclusief voorkeur voor de nieuwe APK-download en terugval naar de oudere APK. JavaScript-syntax gecontroleerd.
+- Geen echte Twizy, USB-adapter of telefoon gebruikt. De nieuwe schrijfroute blijft een preview; fysieke voertuigkwalificatie, GPS en biometrische sensoren staan open. Niet flashen of foutwissen.
 
 ## Regressieherstel — 11 oktober 2026
 
 - 140 Python-tests geslaagd op Windows, inclusief gedeeltelijke speed/warn-selectie met behouden voertuigwaarden, herstelplannen met hash/verval/eenmalig gebruik, gewijzigde beginwaarden en herstel via HTTP.
 - Startscriptchecks voeren het echte PowerShell-script uit met nagebootste HTTP- en procesaanroepen. Beide netwerkmodi, een bestaande verkeerde modus, ontbrekende modusinformatie en het aanmaken van de logmap worden gecontroleerd.
 - 26 Android-kernchecks slagen via het vernieuwde testscript. Alle vijf geteste bronklassen worden opnieuw gecompileerd in een tijdelijke map, met Android/USB-stubs. Een aparte regressietest bewijst dat oude APK/testklassen worden genegeerd en dat een fout in de huidige Java-broncode wordt gevonden.
-- JavaScript-syntax gecontroleerd. CI is uitgebreid met Linux en Windows en voert eerst de Android-kernchecks uit. De aangepaste CI-configuratie is lokaal voorbereid; een GitHub-run staat nog open.
+- JavaScript-syntax gecontroleerd. CI is uitgebreid met Linux en Windows en voert eerst de Android-kernchecks uit. Beide jobs zijn [geslaagd voor het regressieherstel](https://github.com/rakkipe/TwizyPitPro/actions/runs/38182059838).
 - Geen APK, M5-firmware of voertuig gewijzigd. Deze controles zijn geen fysieke validatie van tuning, Android UI, Keystore of USB.
 
 # Validatie — 6 september 2026

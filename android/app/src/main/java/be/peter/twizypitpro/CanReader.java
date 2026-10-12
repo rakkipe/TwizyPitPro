@@ -8,7 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Predicate;
 
-/** Bounded CANopen upload only. No download, fault-clear or NMT API. */
+/** Bounded CANopen reader. Writes are isolated behind VehicleControl and VehicleWriter. */
 final class CanReader implements Closeable {
     interface Transport { byte[] exchange(byte[] request,Predicate<byte[]> match) throws IOException; }
     private final UsbSerialPort port;
@@ -19,6 +19,30 @@ final class CanReader implements Closeable {
     CanReader(UsbSerialPort port,boolean m5,Model model){this.port=port;this.m5=m5;this.model=model;this.transport=this::serialExchange;}
     CanReader(Transport transport){this(transport,null);}
     CanReader(Transport transport,Model model){this.port=null;this.m5=false;this.model=model;this.transport=transport;}
+    boolean canWrite(){return !m5&&port!=null;}
+    VehicleControl.Bus writerBus() {
+        return new VehicleControl.Bus(){
+            public boolean writable(){return canWrite();}
+            public String command(String value,int timeout) throws IOException {if(!canWrite())throw new IOException("Geen vLinker-schrijfverbinding.");return CanReader.this.command(value,timeout);}
+            public JSONObject identity() throws IOException {return CanReader.this.identity();}
+            public long number(int index,int sub,int width,boolean signed) throws IOException {return CanReader.this.number(index,sub,width,signed);}
+            public List<VehicleControl.Frame> capture() throws IOException {return safetyCapture();}
+            public long clock(){return System.nanoTime()/1000000;}
+        };
+    }
+    List<VehicleControl.Frame> safetyCapture() throws IOException {
+        if(!canWrite())throw new IOException("Veiligheidsmonitor vereist vLinker USB.");
+        List<VehicleControl.Frame> frames=new ArrayList<>();
+        try{
+            for(String value:new String[]{"ATCSM1","ATCM000","ATCF000"})if(!command(value,1800).contains("OK"))throw new IOException("Veiligheidsmonitor geweigerd.");
+            monitor(350,frames);return frames;
+        }finally{if(!command("ATCRA581",1800).contains("OK"))throw new IOException("SDO-filter herstellen mislukt.");}
+    }
+    JSONObject pendingSample(VehicleWriter writer) throws Exception {
+        List<VehicleControl.Frame> frames=safetyCapture();writer.observeOff(frames,System.nanoTime()/1000000);
+        Map<Integer,byte[]> latest=new LinkedHashMap<>();for(VehicleControl.Frame f:frames)latest.put(f.id,f.data);
+        JSONObject result=CanTelemetry.decode(latest);Model.put(result,"source","live-usb");Model.put(result,"at",Model.now());return result;
+    }
     void initialize() throws IOException {
         if(m5) {
             SystemClock.sleep(1500);
@@ -151,21 +175,28 @@ final class CanReader implements Closeable {
         Model.put(sample,"source","live-usb");Model.put(sample,"at",Model.now());Model.put(sample,"errors",errors);return sample;
     }
     private String monitor(int duration) throws IOException {
+        return monitor(duration,null);
+    }
+    private String monitor(int duration,List<VehicleControl.Frame> frames) throws IOException {
         try{port.purgeHwBuffers(false,true);}catch(UnsupportedOperationException ignored){}
         port.write("ATMA\r".getBytes(StandardCharsets.US_ASCII),1000);
-        ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[1024];boolean prompt=false;
+        ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[1024];boolean prompt=false;StringBuilder pending=new StringBuilder();
         long end=System.nanoTime()+duration*1000000L;
         try {
-            while(System.nanoTime()<end){int n=port.read(b,100);if(n>0)out.write(b,0,n);if(out.size()>65536)throw new IOException("CAN-monitorbuffer te groot");if(out.toString("US-ASCII").contains(">")){prompt=true;break;}}
+            while(System.nanoTime()<end){int n=port.read(b,100);if(n>0){out.write(b,0,n);stamp(b,n,pending,frames);}if(out.size()>65536)throw new IOException("CAN-monitorbuffer te groot");if(out.toString("US-ASCII").contains(">")){prompt=true;break;}}
         } finally {
             if(!prompt){port.write(new byte[]{13},1000);long stop=System.nanoTime()+1500000000L;
-                while(System.nanoTime()<stop){int n=port.read(b,100);if(n>0)out.write(b,0,n);if(out.size()>98304)throw new IOException("CAN-monitorbuffer overschreden");if(out.toString("US-ASCII").contains(">")){prompt=true;break;}}
+                while(System.nanoTime()<stop){int n=port.read(b,100);if(n>0){out.write(b,0,n);stamp(b,n,pending,frames);}if(out.size()>98304)throw new IOException("CAN-monitorbuffer overschreden");if(out.toString("US-ASCII").contains(">")){prompt=true;break;}}
                 if(!prompt)throw new IOException("CAN-monitor stopt niet; verbind opnieuw");
             }
         }
         String text=out.toString("US-ASCII");String upper=text.toUpperCase(Locale.ROOT);
         for(String error:new String[]{"BUFFER FULL","CAN ERROR","BUS ERROR","BUS OFF","?"})if(upper.contains(error))throw new IOException("CAN-monitorfout; opname verworpen");
         return text;
+    }
+    private static void stamp(byte[] bytes,int length,StringBuilder pending,List<VehicleControl.Frame> frames){
+        if(frames==null)return;pending.append(new String(bytes,0,length,StandardCharsets.US_ASCII).replace('\r','\n'));
+        int end;while((end=pending.indexOf("\n"))>=0){String line=pending.substring(0,end);pending.delete(0,end+1);frames.addAll(VehicleControl.parse(line,System.nanoTime()/1000000));}
     }
     private Map<Integer,byte[]> capture() throws IOException {
         if(m5){

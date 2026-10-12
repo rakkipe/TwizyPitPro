@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 from pit.catalog import defaults
 from pit.tuning import targets
 
-CORE_SOURCES = ("Model", "Tuning", "CanReader", "CanTelemetry", "LaptopLink")
+CORE_SOURCES = ("Model", "Tuning", "CanReader", "CanTelemetry", "LaptopLink", "VehicleWriter", "VehicleControl")
 
 
 def java_tools(tools):
@@ -73,19 +73,19 @@ def run_core_tests(root, jsonjar, compiler, runtime):
         source = root / "android/app/src/main/java/be/peter/twizypitpro"
         tests = root / "android/tests"
         files = [source / (name + ".java") for name in CORE_SOURCES]
-        files += [tests / "CoreTests.java", tests / "TuningTests.java"]
+        files += [tests / "CoreTests.java", tests / "TuningTests.java", tests / "VehicleWriteTests.java"]
         files += sorted((tests / "stubs").rglob("*.java"))
         # Previous APK and test classes are never on the classpath.
         subprocess.run([compiler, "--release", "11", "-encoding", "UTF-8", "-cp", str(jsonjar),
                         "-d", str(classes), *map(str, files)], check=True)
         cp = os.pathsep.join((str(classes), str(jsonjar)))
-        for name in ("CoreTests", "TuningTests"):
+        for name in ("CoreTests", "TuningTests", "VehicleWriteTests"):
             subprocess.run([runtime, "-cp", cp, "be.peter.twizypitpro." + name,
                             str(root / "android/app/src/main/assets/catalog.json"), str(vector_path)], check=True)
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="26 Android-kernchecks op huidige broncode; JVM-stubs, geen APK/USB/UI-test.")
+    parser = argparse.ArgumentParser(description="Android-kern- en schrijfchecks op huidige broncode; JVM-stubs, geen APK/USB/UI-test.")
     parser.add_argument("--tools", type=Path, default=TOOLS, help="Cache voor JDK en org.json; standaard PIT_ANDROID_TOOLS of android-tools")
     args = parser.parse_args(argv)
     compiler, runtime = java_tools(args.tools)

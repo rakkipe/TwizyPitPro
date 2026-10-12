@@ -4,7 +4,7 @@ Laptop 0.4.1-preview gebruikt een gecontroleerde vLinker-schrijfroute. Een apart
 
 Bij gedeeltelijke selectie worden de uiteindelijke maximumsnelheid en overspeedwaarschuwing samen gecontroleerd, inclusief behouden voertuigwaarden. Ook herstel vereist een bekeken plan met hash, eenmalig gebruik en een geldigheid van 120 seconden. Alle beginwaarden worden vóór herstel opnieuw gecontroleerd; een afwijking vereist een nieuw herstelplan. Na opnieuw verbinden of een appherstart moet herstel opnieuw worden voorbereid.
 
-Bij onbekende schrijfuitkomst stopt de procedure zonder automatische rollback of reset. Actieve Renault-clustermeldingen blokkeren nieuwe tuning. Android 0.3.1 en M5 blijven alleen uitlezen. Foutwissen en ECU-flashen ontbreken in de GUI. Er is geen onafhankelijke beveiligingsaudit of volledige fysieke tuningvalidatie uitgevoerd.
+Bij onbekende schrijfuitkomst stopt de procedure zonder automatische rollback of reset. Actieve Renault-clustermeldingen blokkeren nieuwe tuning. Android 0.4.0-preview gebruikt dezelfde begrensde USB-schrijfroute, met Android-toestelgoedkeuring per actie en versleutelde backups en journalen. M5 en de wifi-viewer blijven alleen uitlezen. Foutwissen en ECU-flashen ontbreken in de GUI. Er is geen onafhankelijke beveiligingsaudit of volledige fysieke tuningvalidatie uitgevoerd.
 
 ## Een probleem melden
 

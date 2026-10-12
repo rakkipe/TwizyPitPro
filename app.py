@@ -16,6 +16,14 @@ from pit.service import PitService, atomic_json
 ROOT = Path(__file__).resolve().parent
 
 
+def android_apk():
+    for name in ("TwizyPitPro-0.4.0-preview.apk", "TwizyPitPro-0.3.1.apk"):
+        path = ROOT / "releases" / "android" / name
+        if path.is_file():
+            return path
+    return None
+
+
 class Server(ThreadingHTTPServer):
     daemon_threads = True
     def __init__(self, address, service, lan=False):
@@ -83,6 +91,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond(dict(password_required=False, local_control_only=True))
                 if path == "/api/bootstrap":
                     return self.respond(dict(version=VERSION, local=self.local, csrf=self.server.csrf if self.local else None,
+                                             android_apk_name=android_apk().name if android_apk() else None,
                                              lan=self.server.lan, phone_urls=[f"http://{ip}:{self.server.server_port}/?viewer={self.server.viewer_token}" for ip in self.server.allowed_hosts if ip not in ("localhost", "127.0.0.1")] if self.local and self.server.lan else []))
                 if path == "/api/state":
                     return self.respond(service.state())
@@ -93,8 +102,8 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/sessions":
                     return self.respond(service.sessions())
                 if path == "/api/download/android":
-                    apk = ROOT / "releases" / "android" / "TwizyPitPro-0.3.1.apk"
-                    if not apk.is_file():
+                    apk = android_apk()
+                    if apk is None:
                         return self.respond({"error": "Android-APK nog niet beschikbaar."}, 404)
                     return self.respond(apk.read_bytes(), content_type="application/vnd.android.package-archive", attachment=apk.name)
                 if path == "/api/export/report":
