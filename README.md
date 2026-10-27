@@ -1,94 +1,20 @@
-<p align="center"><img src="web/icon.png" width="120" alt="Twizy Pit Pro icoon"></p>
+﻿# Twizy Pit Pro — archief
 
-# Twizy Pit Pro
+Deze map is sinds 12 oktober 2026 een **archief**, geen werkende app. De actieve bron en de startbare app staan in `D:\downloads\TwizyPitPro`:
 
-Een pitstudio voor Renault Twizy: een native Android-app en een Windows/laptop-GUI met diagnose, telemetrie, profielontwerp en toestelgoedkeuring op Android.
+- Pc: **0.4.9-preview** — start met `Start.ps1 -LocalOnly` in die map, daarna `http://127.0.0.1:8765`.
+- Android: **0.4.33** — `D:\downloads\TwizyPitPro\releases\android\TwizyPitPro-0.4.33.apk`.
 
-**Laptop 0.4.1-preview heeft een vLinker-schrijfroute met tijdelijke level-4-toegang, 75 uitgelezen beginwaarden, selectie per instelling, backup, read-back en controle na contactcyclus.** De software is offline getest. Een volledige tuningwijziging op een echte Twizy is nog niet gevalideerd. [Wijzigingen en gebruik](docs/STATUS-0.4.1.md).
+`Start.ps1` in deze map verwijst alleen door naar die locatie.
 
-**Android 0.4.0-preview heeft nu dezelfde gecontroleerde vLinker USB-schrijf- en herstelworkflow, met toestelgoedkeuring per actie en versleutelde backups/journalen.** M5 en de wifi-viewer blijven alleen uitlezen. Actieve Renault-clustermeldingen blokkeren tuning. ECU-flashen en foutwissen ontbreken. Fysieke tuningvalidatie staat nog open; zie [de Android-procedure](docs/ANDROID.md#schrijven-en-herstellen-via-usb).
+## Wat hier nog staat
 
-[Android APK downloaden](https://github.com/rakkipe/TwizyPitPro/releases/download/android-v0.4.0-preview/TwizyPitPro-0.4.0-preview.apk) · [Android-handleiding](docs/ANDROID.md) · [Hardware](docs/HARDWARE.md) · [Validatie](docs/VALIDATIE.md)
+- De volledige 0.4.1-bron en -historie in `.git` (HEAD `1fbdb58`). De working tree is opgeruimd; alles is met `git checkout` of vanaf GitHub te herstellen.
+- `unieke-wijzigingen/`: kopieen van de versleutelde voertuigopslag (`VehicleStore`, `Vault`, `VehicleWriter`) en de strengere netwerkcontrole. Deze bestanden zijn byte-identiek aan Git HEAD; ze zijn alleen uniek ten opzichte van de actieve locatie, die een andere `JournalStore` gebruikt.
+- `openrlink-multicar/`: het zusterproject OpenRLink met eigen Git (1.7.0-preview).
+- `data/`: demo-sessie, scans en gebeurtenissen van 11 oktober 2026.
+- De APK's `OpenRLink-1.5.0-preview.apk` en `OpenRLink-1.6.0-preview.apk` met hun SHA-256.
 
-<p align="center">
-  <img src="docs/images/android-tuning.png" width="280" alt="Native Android tuningstudio in demo">
-  <img src="docs/images/android-profiles.png" width="280" alt="Native Android profielbeheer">
-</p>
+## Wat hier niet meer staat
 
-Nieuw in 0.3: **75 registers voor alle 43 ontwerpvelden**, een volledige registervergelijking in beide GUI's en uitgebreidere CAN-uitlezing. [Nieuwe vLinker-schrijfprocedure en beperkingen](docs/STATUS-0.4.md).
-
-## Wat zit erin?
-
-- Een zelfstandige, native Android-app voor **Android 11 of nieuwer**; geen WebView en geen laptop nodig voor de demo.
-- Een donkere grafische pitstudio met dashboard, diagnose, 43 ontwerpvelden, registervergelijking en versiegebonden profielen.
-- Laptop: een afzonderlijke vLinker-schrijfprocedure met beginsnapshot, bevestiging, read-back en expliciet herstel.
-- Vier referentieschema's: **Twizy 45/80 × SEVCON 0712.0001/0712.0002**. Identiteit en revisie moeten passen; onbekende combinaties en 0712.0003+ blokkeren demo-toepassing.
-- Een CANopen-leespad voor **vLinker FS via USB** of **M5StickC Plus2 + CAN Unit U085** met de meegeleverde PitBridge-firmware. Uitlezing van controlleridentiteit, firmware en beschikbare diagnosewaarden. De vLinker-leesverbinding is op hardware gebruikt; M5 en Android vereisen nog fysieke validatie.
-- Profielen, sessies, handmatige rondemarkeringen en CSV-/JSON-export. Android heeft optionele GPS-registratie zolang de app op de voorgrond staat.
-- Android: goedkeuring per opgeslagen wijziging met biometrie/toestelcode, Keystore en versleutelde opslag. De laptop bedien je zonder appwachtwoord; de wifi-viewer kan alleen lezen.
-- Een eigen appicoon en een telefoonviewer voor het dashboard van de laptop.
-
-Controllerherkenning bewijst niet welke reductiekast of mechanische uitvoering gemonteerd is. De simulator gebruikt fictieve identiteit en synthetische meetwaarden en voorspelt geen circuitprestaties. Versiepakketten zijn referentieschema's, geen gegenereerde ECU-firmware.
-
-## Android installeren
-
-1. Download [TwizyPitPro-0.4.0-preview.apk](https://github.com/rakkipe/TwizyPitPro/releases/download/android-v0.4.0-preview/TwizyPitPro-0.4.0-preview.apk) op je telefoon. Deze APK kan de officiële Android 0.3.1 bijwerken; verwijder de oude app niet.
-2. Open het bestand op je telefoon en geef die bestandsapp zo nodig toestemming om apps te installeren.
-3. Start **Twizy Pit Pro**. De app opent in demo. Stel een eigen toestelcode of biometrie in om wijzigingen te kunnen bewaren.
-
-De release bevat ook een SHA-256-bestand en het openbare ondertekeningsrapport. De officiële certificaatvingerafdruk staat in [de Android-handleiding](docs/ANDROID.md#apk-en-updates). Updates installeer je zelf; de privésleutel wordt niet gepubliceerd.
-
-## Laptop starten
-
-Benodigd: Windows, Python 3.12 of nieuwer en internet voor de eerste installatie. Download de broncode of clone deze repository. Open PowerShell in de projectmap:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Install.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Start.ps1 -LocalOnly
-```
-
-Open daarna `http://127.0.0.1:8765`. De laptop vraagt geen appwachtwoord. Wie toegang heeft tot je Windows-sessie kan de app bedienen. De installatie maakt een snelkoppeling **in de projectmap**; je kunt die naar je bureaublad kopiëren.
-
-`Start.vbs` of `Start.ps1` zonder `-LocalOnly` maakt de telefoonviewer beschikbaar op het lokale netwerk. Gebruik daarvoor je eigen hotspot of vertrouwd wifi: deze viewer gebruikt HTTP met een tijdelijke toegangssleutel, zonder TLS. Firewallregels worden niet automatisch gewijzigd.
-
-Een al draaiende server wordt alleen hergebruikt als de netwerkmodus overeenkomt. Bij wisselen tussen LAN en `-LocalOnly` meldt het startscript dat je de bestaande server eerst moet afsluiten. Het onderbreekt geen lopende voertuigactie.
-
-Wil je de APK via de laptopknop aanbieden, plaats dan het releasebestand in `releases/android/TwizyPitPro-0.4.0-preview.apk`. APK's en persoonlijke gegevens zitten niet in de Git-broncode.
-
-## Ontwikkelen en testen
-
-De laptop gebruikt Python, standaardbibliotheek HTTP en `pyserial==3.5`. De Android-app gebruikt Java, Android SDK 35 en USB Serial for Android 3.10.0; de Windows-buildscripts werken zonder Gradle.
-
-```powershell
-# Na Install.ps1: de offline Python-tests
-.\.venv\Scripts\python.exe -m unittest discover -s tests -q
-
-# Android: kern- en schrijfcontroles op actuele broncode (JDK 11+, geen SDK/APK nodig)
-.\.venv\Scripts\python.exe scripts\test_android.py
-
-# Android-APK: bouwtools downloaden en ongetekend bouwen
-.\.venv\Scripts\python.exe scripts\setup_android.py
-.\android\Build.ps1 -Unsigned
-
-# Een eigen installabele APK ondertekenen
-.\android\Initialize-AndroidSigning.ps1
-.\android\Build.ps1
-```
-
-De ongetekende APK staat onder `android/build/aligned.apk`; de getekende onder `releases/android/`. Initialisatie maakt **jouw eigen** lokale sleutel. Daarmee kun je de officiële APK niet als update vervangen. Bewaar eigen sleutels buiten Git. De scripts downloaden bouwafhankelijkheden; de voor 0.2.0 gebruikte versies staan in [de bouwregistratie](docs/android-build-dependencies.json). Het setupscript kiest de nieuwste Java 21-release en kan bij een latere uitvoering andere bouwtools ophalen; een identieke binaire rebuild is niet gegarandeerd.
-
-De kernchecks compileren alle zeven geteste Java-klassen uit de huidige broncode in een tijdelijke map. Oude APK- en testklassen worden genegeerd. Ze gebruiken Android/USB-stubs die platformgebruik weigeren; UI, biometrie, Keystore en echte USB vereisen aparte Android-tests. De eerste uitvoering downloadt de vaste org.json-testafhankelijkheid; daarna kan deze controle offline. `PIT_ANDROID_TOOLS` of `--tools` kiest de cachemap. CI voert de kernchecks en Python-regressietests uit op Linux en Windows, inclusief de startscriptcontroles op Windows.
-
-141 Python-tests en 46 Android-kerncontroles zijn geslaagd. Android 0.4.0-preview is ondertekend, als update vanaf 0.3.1 geïnstalleerd en met vijf aanvullende opslag-/UI-tests in een Android 11-emulator gecontroleerd. Bekijk [de exacte controles en beperkingen](docs/VALIDATIE.md). GitHub Actions voert de Python- en Android-kernchecks uit op Windows en Linux. De M5-build staat beschreven in [Hardware](docs/HARDWARE.md).
-
-## Veiligheid, gegevens en bijdragen
-
-Op Android beschermt toestelgoedkeuring de gebruiksinstallatie. Een openbare MIT-repository kan door anderen worden gekopieerd en gewijzigd; dat verandert jouw geïnstalleerde app niet. Iedereen met de toestelcode of geregistreerde biometrie kan op dat toestel goedkeuren. Deze release heeft geen onafhankelijke beveiligingsaudit gehad.
-
-Lokale data, exports, wachtwoorden, signingmateriaal, bouwtools en test-APK's worden uitgesloten van Git. Handmatige CSV-/JSON-exports zijn leesbare bestanden. Deel geen ongefilterde voertuiglogs of sleutels in issues. Zie [SECURITY.md](SECURITY.md) en [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Licentie en bronnen
-
-[MIT](LICENSE), copyright 2026 rakkipe. Hergebruik en wijzigingen zijn toegestaan met behoud van de licentietekst. Onderdelen van derden behouden hun eigen notices; zie [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) en [bronnen en onderbouwing](docs/BRONNEN.md).
-
-Een onafhankelijk project, zonder officiële band met Renault, Vgate, M5Stack of Open Vehicles.
+De Python-app, Android-bron, web-GUI, firmware-bron, tests en build-tools zijn verwijderd. Ze staan in de Git-historie, in `D:\downloads\TwizyPitPro` of zijn opnieuw te downloaden. Gebruik deze map niet als zelfstandige app.
